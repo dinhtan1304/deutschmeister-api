@@ -27,6 +27,9 @@ import {
   ImportWordsDto,
   QueryPersonalWordsDto,
   BatchDeleteDto,
+  ReviewPersonalWordDto,
+  BatchReviewDto,
+  SRSQueryDto,
 } from './dto/personal-words.dto';
 
 @ApiTags('personal-words')
@@ -150,5 +153,74 @@ export class PersonalWordsController {
     @Body() dto: BatchDeleteDto,
   ) {
     return this.service.batchDelete(userId, dto);
+  }
+
+  // ============================================
+  // SRS (Spaced Repetition System)
+  // ============================================
+
+  @Get('srs/due')
+  @ApiOperation({ summary: 'Lấy từ cần ôn tập (due + new)' })
+  @ApiResponse({ status: 200, description: 'List of words due for review' })
+  getDueForReview(
+    @CurrentUser('id') userId: string,
+    @Query() query: SRSQueryDto,
+  ) {
+    return this.service.getDueForReview(userId, query);
+  }
+
+  @Get('srs/stats')
+  @ApiOperation({ summary: 'Thống kê SRS' })
+  @ApiResponse({ status: 200, description: 'SRS statistics' })
+  getSRSStats(@CurrentUser('id') userId: string) {
+    return this.service.getSRSStats(userId);
+  }
+
+  @Post('srs/review')
+  @ApiOperation({ summary: 'Review một từ (SM-2)' })
+  @ApiResponse({ status: 200, description: 'Updated word with new SRS data' })
+  reviewWord(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ReviewPersonalWordDto,
+  ) {
+    return this.service.reviewWord(userId, dto);
+  }
+
+  @Post('srs/batch-review')
+  @ApiOperation({ summary: 'Review nhiều từ cùng lúc' })
+  @ApiResponse({ status: 200, description: 'Batch review results' })
+  batchReview(
+    @CurrentUser('id') userId: string,
+    @Body() dto: BatchReviewDto,
+  ) {
+    return this.service.batchReview(userId, dto.reviews);
+  }
+
+  @Get('srs/preview/:id')
+  @ApiOperation({ summary: 'Preview intervals cho từ' })
+  @ApiParam({ name: 'id', description: 'Word ID' })
+  async getIntervalPreview(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    const word = await this.service.findOne(userId, id);
+    return this.service.getIntervalPreview(word);
+  }
+
+  @Post('srs/reset/:id')
+  @ApiOperation({ summary: 'Reset SRS progress của một từ' })
+  @ApiParam({ name: 'id', description: 'Word ID' })
+  resetSRS(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.service.resetSRS(userId, id);
+  }
+
+  @Post('srs/reset-all')
+  @ApiOperation({ summary: 'Reset toàn bộ SRS progress' })
+  @ApiResponse({ status: 200, description: 'Number of words reset' })
+  resetAllSRS(@CurrentUser('id') userId: string) {
+    return this.service.resetAllSRS(userId);
   }
 }

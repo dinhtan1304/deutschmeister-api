@@ -18,6 +18,11 @@ import {
   WordType,
   Level,
   Gender,
+  ReviewPersonalWordDto,
+  SRSRating,
+  SRSQueryDto,
+  SRSStatsDto,
+  IntervalPreviewDto,
 } from './dto/personal-words.dto';
 
 @Injectable()
@@ -466,6 +471,337 @@ export class PersonalWordsService {
       category: row.category?.trim() || null,
       tags: row.tags ? row.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
       notes: row.notes?.trim() || null,
+    };
+  }
+
+  // ============================================
+  // SRS (Spaced Repetition System) Methods
+  // ============================================
+
+  /**
+   * Get words due for review
+   */
+  async getDueForReview(userId: string, query: SRSQueryDto) {
+    const { 
+      limit = 20, 
+      wordType, 
+      level, 
+      includeNew = true, 
+      newLimit = 5 
+    } = query;
+
+    const where: Prisma.PersonalWordWhereInput = {
+      userId,
+      nextReviewAt: { lte: new Date() },
+    };
+
+    if (wordType) where.wordType = wordType;
+    if (level) where.level = level;
+
+    // Get due words
+    const dueWords = await this.prisma.personalWord.findMany({
+      where,
+      orderBy: [
+        { nextReviewAt: 'asc' },
+        { repetitions: 'asc' }, // Prioritize struggling words
+      ],
+      take: limit,
+    });
+
+    // Optionally include new words (never reviewed)
+    let newWords: any[] = [];
+    if (includeNew && dueWords.length < limit) {
+      const newWhere: Prisma.PersonalWordWhereInput = {
+        userId,
+        repetitions: 0,
+        totalReviews: 0,
+      };
+      if (wordType) newWhere.wordType = wordType;
+      if (level) newWhere.level = level;
+
+      newWords = await this.prisma.personalWord.findMany({
+        where: newWhere,
+        orderBy: { createdAt: 'asc' }, // Oldest first
+        take: Math.min(newLimit, limit - dueWords.length),
+      });
+    }
+
+    return {
+      due: dueWords,
+      new: newWords,
+      total: dueWords.length + newWords.length,
+    };
+  }
+
+  /**
+   * Review a word (SM-2 Algorithm)
+   */
+  async reviewWord(userId: string, dto: ReviewPersonalWordDto) {
+    const word = await this.findOne(userId, dto.wordId);
+
+    // Calculate new SM-2 parameters
+    const { easeFactor, interval, repetitions } = this.calculateSM2(
+      word.easeFactor,
+      word.interval,
+      word.repetitions,
+      dto.rating,
+    );
+
+    // Calculate next review date
+    const nextReviewAt = new Date();
+    nextReviewAt.setDate(nextReviewAt.getDate() + interval);
+
+    // Update word
+    return this.prisma.personalWord.update({
+      where: { id: word.id },
+      data: {
+        easeFactor,
+        interval,
+        repetitions,
+        nextReviewAt,
+        lastReviewAt: new Date(),
+        totalReviews: { increment: 1 },
+        correctCount: { increment: dto.rating !== SRSRating.AGAIN ? 1 : 0 },
+      },
+    });
+  }
+
+  /**
+   * Batch review multiple words
+   */
+  async batchReview(userId: string, reviews: ReviewPersonalWordDto[]) {
+    const results = await Promise.all(
+      reviews.map(async (review) => {
+        try {
+          const updated = await this.reviewWord(userId, review);
+          return { wordId: review.wordId, success: true, data: updated };
+        } catch (error: any) {
+          return { wordId: review.wordId, success: false, error: error.message };
+        }
+      }),
+    );
+
+    return {
+      reviewed: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
+  }
+
+  /**
+   * Get SRS statistics
+   */
+  async getSRSStats(userId: string): Promise<SRSStatsDto> {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const [
+      total,
+      due,
+      newCount,
+      learning,
+      review,
+      mature,
+      reviewStats,
+      reviewedToday,
+      forecastData,
+    ] = await Promise.all([
+      // Total words
+      this.prisma.personalWord.count({ where: { userId } }),
+
+      // Due for review
+      this.prisma.personalWord.count({
+        where: { userId, nextReviewAt: { lte: now } },
+      }),
+
+      // New (never reviewed)
+      this.prisma.personalWord.count({
+        where: { userId, repetitions: 0, totalReviews: 0 },
+      }),
+
+      // Learning (interval < 7)
+      this.prisma.personalWord.count({
+        where: { userId, interval: { gt: 0, lt: 7 } },
+      }),
+
+      // Review (7 <= interval < 21)
+      this.prisma.personalWord.count({
+        where: { userId, interval: { gte: 7, lt: 21 } },
+      }),
+
+      // Mature (interval >= 21)
+      this.prisma.personalWord.count({
+        where: { userId, interval: { gte: 21 } },
+      }),
+
+      // Retention rate calculation
+      this.prisma.personalWord.aggregate({
+        where: { userId, totalReviews: { gt: 0 } },
+        _sum: { correctCount: true, totalReviews: true },
+      }),
+
+      // Reviewed today
+      this.prisma.personalWord.count({
+        where: {
+          userId,
+          lastReviewAt: { gte: todayStart },
+        },
+      }),
+
+      // Forecast for next 7 days
+      this.getForecast(userId, 7),
+    ]);
+
+    const totalReviews = reviewStats._sum.totalReviews || 0;
+    const correctReviews = reviewStats._sum.correctCount || 0;
+    const retentionRate = totalReviews > 0 
+      ? Math.round((correctReviews / totalReviews) * 100 * 10) / 10 
+      : 0;
+
+    return {
+      total,
+      due,
+      new: newCount,
+      learning,
+      review,
+      mature,
+      retentionRate,
+      reviewedToday,
+      forecast: forecastData,
+    };
+  }
+
+  /**
+   * Get forecast for next N days
+   */
+  private async getForecast(userId: string, days: number) {
+    const forecast: { date: string; count: number }[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < days; i++) {
+      const date = new Date(today);
+      date.setDate(date.getDate() + i);
+      
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
+
+      const count = await this.prisma.personalWord.count({
+        where: {
+          userId,
+          nextReviewAt: {
+            gte: date,
+            lt: nextDate,
+          },
+        },
+      });
+
+      forecast.push({
+        date: date.toISOString().split('T')[0],
+        count,
+      });
+    }
+
+    return forecast;
+  }
+
+  /**
+   * Preview intervals for all ratings
+   */
+  getIntervalPreview(word: {
+    easeFactor: number;
+    interval: number;
+    repetitions: number;
+  }): IntervalPreviewDto {
+    return {
+      again: 1,
+      hard: this.calculateSM2(word.easeFactor, word.interval, word.repetitions, SRSRating.HARD).interval,
+      good: this.calculateSM2(word.easeFactor, word.interval, word.repetitions, SRSRating.GOOD).interval,
+      easy: this.calculateSM2(word.easeFactor, word.interval, word.repetitions, SRSRating.EASY).interval,
+    };
+  }
+
+  /**
+   * Reset SRS progress for a word
+   */
+  async resetSRS(userId: string, wordId: string) {
+    await this.findOne(userId, wordId);
+
+    return this.prisma.personalWord.update({
+      where: { id: wordId },
+      data: {
+        easeFactor: 2.5,
+        interval: 0,
+        repetitions: 0,
+        nextReviewAt: new Date(),
+        lastReviewAt: null,
+        totalReviews: 0,
+        correctCount: 0,
+      },
+    });
+  }
+
+  /**
+   * Reset all SRS progress
+   */
+  async resetAllSRS(userId: string) {
+    const result = await this.prisma.personalWord.updateMany({
+      where: { userId },
+      data: {
+        easeFactor: 2.5,
+        interval: 0,
+        repetitions: 0,
+        nextReviewAt: new Date(),
+        lastReviewAt: null,
+        totalReviews: 0,
+        correctCount: 0,
+      },
+    });
+
+    return { reset: result.count };
+  }
+
+  /**
+   * SM-2 Algorithm Implementation
+   */
+  private calculateSM2(
+    easeFactor: number,
+    interval: number,
+    repetitions: number,
+    rating: SRSRating,
+  ): { easeFactor: number; interval: number; repetitions: number } {
+    // Map rating to quality (0-5)
+    const quality = {
+      [SRSRating.AGAIN]: 0,
+      [SRSRating.HARD]: 3,
+      [SRSRating.GOOD]: 4,
+      [SRSRating.EASY]: 5,
+    }[rating];
+
+    // Failed (quality < 3) - reset
+    if (quality < 3) {
+      return { easeFactor, interval: 1, repetitions: 0 };
+    }
+
+    // Calculate new ease factor
+    // EF' = EF + (0.1 - (5-q) * (0.08 + (5-q) * 0.02))
+    let newEF = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+    newEF = Math.max(1.3, newEF); // Minimum EF is 1.3
+
+    // Calculate new interval
+    let newInterval: number;
+    if (repetitions === 0) {
+      newInterval = 1;
+    } else if (repetitions === 1) {
+      newInterval = 6;
+    } else {
+      newInterval = Math.round(interval * newEF);
+    }
+
+    return {
+      easeFactor: Math.round(newEF * 100) / 100,
+      interval: newInterval,
+      repetitions: repetitions + 1,
     };
   }
 }

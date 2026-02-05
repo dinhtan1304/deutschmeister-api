@@ -391,3 +391,97 @@ export class PaginatedResponseDto {
   @ApiProperty() limit: number;
   @ApiProperty() totalPages: number;
 }
+
+// ============================================
+// SRS (Spaced Repetition System) DTOs
+// ============================================
+export enum SRSRating {
+  AGAIN = 'again',  // quality 0-2: forgot, reset
+  HARD = 'hard',    // quality 3: correct with difficulty  
+  GOOD = 'good',    // quality 4: correct with hesitation
+  EASY = 'easy',    // quality 5: perfect recall
+}
+
+export class ReviewPersonalWordDto {
+  @ApiProperty({ description: 'ID of the personal word to review' })
+  @IsString()
+  wordId: string;
+
+  @ApiProperty({ 
+    enum: SRSRating, 
+    description: 'Review quality rating',
+    example: SRSRating.GOOD 
+  })
+  @IsEnum(SRSRating)
+  rating: SRSRating;
+}
+
+export class BatchReviewDto {
+  @ApiProperty({ type: [ReviewPersonalWordDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReviewPersonalWordDto)
+  @ArrayMaxSize(50)
+  reviews: ReviewPersonalWordDto[];
+}
+
+export class SRSQueryDto {
+  @ApiPropertyOptional({ default: 20, description: 'Limit number of words to review' })
+  @IsOptional()
+  limit?: number;
+
+  @ApiPropertyOptional({ enum: WordType, description: 'Filter by word type' })
+  @IsOptional()
+  @IsEnum(WordType)
+  wordType?: WordType;
+
+  @ApiPropertyOptional({ enum: Level, description: 'Filter by level' })
+  @IsOptional()
+  @IsEnum(Level)
+  level?: Level;
+
+  @ApiPropertyOptional({ description: 'Include new words (never reviewed)' })
+  @IsOptional()
+  @IsBoolean()
+  includeNew?: boolean;
+
+  @ApiPropertyOptional({ default: 5, description: 'Max new words to include' })
+  @IsOptional()
+  newLimit?: number;
+}
+
+export class SRSStatsDto {
+  @ApiProperty({ description: 'Words due for review' })
+  due: number;
+
+  @ApiProperty({ description: 'New words (never reviewed)' })
+  new: number;
+
+  @ApiProperty({ description: 'Words in learning phase (interval < 7)' })
+  learning: number;
+
+  @ApiProperty({ description: 'Words in review phase (7 <= interval < 21)' })
+  review: number;
+
+  @ApiProperty({ description: 'Mature words (interval >= 21)' })
+  mature: number;
+
+  @ApiProperty({ description: 'Total words in Word Bank' })
+  total: number;
+
+  @ApiProperty({ description: 'Average retention rate (correct/total reviews)' })
+  retentionRate: number;
+
+  @ApiProperty({ description: 'Words reviewed today' })
+  reviewedToday: number;
+
+  @ApiProperty({ description: 'Forecast for next 7 days' })
+  forecast: { date: string; count: number }[];
+}
+
+export class IntervalPreviewDto {
+  @ApiProperty() again: number;
+  @ApiProperty() hard: number;
+  @ApiProperty() good: number;
+  @ApiProperty() easy: number;
+}
