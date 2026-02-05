@@ -205,46 +205,103 @@ export class DashboardService {
   // ============================================
   // Weekly Progress (Last 7 days)
   // ============================================
+  /**
+   * OPTIMIZED: Batch query for 7 days (2 queries instead of 14)
+   * Trước: 7 ngày × 2 queries = 14 queries
+   * Sau: 2 queries total
+   */
   async getWeeklyProgress(userId: string): Promise<WeeklyProgressDto[]> {
-    const days: WeeklyProgressDto[] = [];
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+    // Calculate date range
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    // Batch query: 2 queries thay vì 14
+    const [gameSessions, progressData] = await Promise.all([
+      this.prisma.gameSession.findMany({
+        where: {
+          userId,
+          startedAt: { gte: sevenDaysAgo, lte: today },
+        },
+        select: { startedAt: true, duration: true },
+      }),
+      this.prisma.progress.findMany({
+        where: {
+          userId,
+          OR: [
+            { createdAt: { gte: sevenDaysAgo, lte: today } },
+            { lastReviewAt: { gte: sevenDaysAgo, lte: today } },
+          ],
+        },
+        select: { createdAt: true, lastReviewAt: true },
+      }),
+    ]);
+
+    // Aggregate in memory by date
+    const dateMap = new Map<
+      string,
+      { gamesPlayed: number; duration: number; wordsLearned: Set<string> }
+    >();
+
+    // Initialize all 7 days
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      dateMap.set(dateStr, { gamesPlayed: 0, duration: 0, wordsLearned: new Set() });
+    }
+
+    // Aggregate game sessions
+    gameSessions.forEach((g) => {
+      const dateStr = g.startedAt.toISOString().split('T')[0];
+      const entry = dateMap.get(dateStr);
+      if (entry) {
+        entry.gamesPlayed++;
+        entry.duration += g.duration || 0;
+      }
+    });
+
+    // Aggregate progress (count unique activities per day)
+    progressData.forEach((p) => {
+      // Check createdAt
+      if (p.createdAt) {
+        const dateStr = p.createdAt.toISOString().split('T')[0];
+        const entry = dateMap.get(dateStr);
+        if (entry) {
+          entry.wordsLearned.add(`created-${p.createdAt.getTime()}`);
+        }
+      }
+      // Check lastReviewAt
+      if (p.lastReviewAt) {
+        const dateStr = p.lastReviewAt.toISOString().split('T')[0];
+        const entry = dateMap.get(dateStr);
+        if (entry) {
+          entry.wordsLearned.add(`reviewed-${p.lastReviewAt.getTime()}`);
+        }
+      }
+    });
+
+    // Build result array
+    const days: WeeklyProgressDto[] = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       date.setHours(0, 0, 0, 0);
-      
-      const nextDate = new Date(date);
-      nextDate.setDate(nextDate.getDate() + 1);
 
-      const [gamesData, wordsLearned] = await Promise.all([
-        // Games played and duration
-        this.prisma.gameSession.aggregate({
-          where: {
-            userId,
-            startedAt: { gte: date, lt: nextDate },
-          },
-          _count: true,
-          _sum: { duration: true },
-        }),
-        // Words learned (progress created or updated)
-        this.prisma.progress.count({
-          where: {
-            userId,
-            OR: [
-              { createdAt: { gte: date, lt: nextDate } },
-              { lastReviewAt: { gte: date, lt: nextDate } },
-            ],
-          },
-        }),
-      ]);
+      const dateStr = date.toISOString().split('T')[0];
+      const entry = dateMap.get(dateStr)!;
 
       days.push({
         day: dayNames[date.getDay()],
-        date: date.toISOString().split('T')[0],
-        wordsLearned,
-        gamesPlayed: gamesData._count || 0,
-        minutes: Math.round((gamesData._sum.duration || 0) / 60),
+        date: dateStr,
+        wordsLearned: entry.wordsLearned.size,
+        gamesPlayed: entry.gamesPlayed,
+        minutes: Math.round(entry.duration / 60),
       });
     }
 
@@ -365,39 +422,68 @@ export class DashboardService {
   // Helper Methods
   // ============================================
 
+  /**
+   * OPTIMIZED: Calculate streak with batch query (2 queries instead of N*2)
+   * Trước: 30 ngày streak = 60 queries
+   * Sau: 30 ngày streak = 2 queries
+   */
   private async calculateStreak(userId: string): Promise<number> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Batch query: lấy tất cả activities trong 60 ngày gần nhất (1 lần)
+    const sixtyDaysAgo = new Date(today);
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    const [gameSessions, progressReviews] = await Promise.all([
+      this.prisma.gameSession.findMany({
+        where: {
+          userId,
+          startedAt: { gte: sixtyDaysAgo },
+        },
+        select: { startedAt: true },
+      }),
+      this.prisma.progress.findMany({
+        where: {
+          userId,
+          lastReviewAt: { gte: sixtyDaysAgo },
+        },
+        select: { lastReviewAt: true },
+      }),
+    ]);
+
+    // Build set of active dates (in memory - very fast)
+    const activeDates = new Set<string>();
+
+    gameSessions.forEach((g) => {
+      const dateStr = g.startedAt.toISOString().split('T')[0];
+      activeDates.add(dateStr);
+    });
+
+    progressReviews.forEach((p) => {
+      if (p.lastReviewAt) {
+        const dateStr = p.lastReviewAt.toISOString().split('T')[0];
+        activeDates.add(dateStr);
+      }
+    });
+
+    // Calculate streak from today backwards (in memory)
     let streak = 0;
     let currentDate = new Date(today);
+    let checkedToday = false;
 
-    while (true) {
-      const nextDate = new Date(currentDate);
-      nextDate.setDate(nextDate.getDate() + 1);
+    for (let i = 0; i < 60; i++) {
+      const dateStr = currentDate.toISOString().split('T')[0];
 
-      // Check if there was any activity on this date
-      const hasActivity = await this.prisma.gameSession.findFirst({
-        where: {
-          userId,
-          startedAt: { gte: currentDate, lt: nextDate },
-        },
-      });
-
-      const hasReview = await this.prisma.progress.findFirst({
-        where: {
-          userId,
-          lastReviewAt: { gte: currentDate, lt: nextDate },
-        },
-      });
-
-      if (hasActivity || hasReview) {
+      if (activeDates.has(dateStr)) {
         streak++;
         currentDate.setDate(currentDate.getDate() - 1);
+        checkedToday = true;
       } else {
         // If today has no activity yet, check yesterday
-        if (streak === 0 && currentDate.getTime() === today.getTime()) {
+        if (!checkedToday && i === 0) {
           currentDate.setDate(currentDate.getDate() - 1);
+          checkedToday = true;
           continue;
         }
         break;

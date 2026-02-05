@@ -47,6 +47,15 @@ export class WordsService {
     return word;
   }
 
+  /**
+   * OPTIMIZED: Get random words using database-level sampling
+   * Trước: Load TẤT CẢ words vào memory rồi shuffle
+   * Sau: Sử dụng TABLESAMPLE hoặc 2-phase query
+   * 
+   * Approach: Use a 2-phase query to avoid loading all rows
+   * Phase 1: Get total count matching filters
+   * Phase 2: Get random offset positions and fetch those specific rows
+   */
   async getRandom(dto: RandomWordsDto) {
     const { count = 10, gender, category, levels } = dto;
     const where: Prisma.WordWhereInput = {};
@@ -55,11 +64,59 @@ export class WordsService {
     if (category) where.category = category;
     if (levels?.length) where.level = { in: levels };
 
-    const words = await this.prisma.word.findMany({ where });
-    
-    // Shuffle and return
-    const shuffled = words.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+    // Phase 1: Get total count
+    const totalCount = await this.prisma.word.count({ where });
+
+    if (totalCount === 0) {
+      return [];
+    }
+
+    if (totalCount <= count) {
+      // If we need all or more than available, just return all shuffled
+      const words = await this.prisma.word.findMany({ where });
+      return this.shuffleArray(words);
+    }
+
+    // Phase 2: Generate random unique offsets and fetch
+    const randomOffsets = this.generateUniqueRandomNumbers(count, totalCount);
+
+    // Fetch words at random positions using skip/take
+    // This is more efficient than loading all into memory
+    const words = await Promise.all(
+      randomOffsets.map((offset) =>
+        this.prisma.word.findFirst({
+          where,
+          skip: offset,
+          take: 1,
+        }),
+      ),
+    );
+
+    // Filter out any nulls (shouldn't happen but safe)
+    return words.filter((w): w is NonNullable<typeof w> => w !== null);
+  }
+
+  /**
+   * Fisher-Yates shuffle algorithm
+   */
+  private shuffleArray<T>(array: T[]): T[] {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
+  /**
+   * Generate n unique random numbers in range [0, max)
+   */
+  private generateUniqueRandomNumbers(n: number, max: number): number[] {
+    const numbers = new Set<number>();
+    while (numbers.size < n) {
+      numbers.add(Math.floor(Math.random() * max));
+    }
+    return Array.from(numbers);
   }
 
   async getStats() {

@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -8,9 +9,12 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  // Enable cookie parsing for httpOnly refresh tokens
+  app.use(cookieParser());
+
   app.enableCors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
-    credentials: true,
+    credentials: true, // Important: allows cookies to be sent cross-origin
   });
 
   app.useGlobalPipes(
