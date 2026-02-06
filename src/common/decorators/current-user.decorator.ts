@@ -9,20 +9,13 @@ export const CurrentUser = createParamDecorator(
       return null;
     }
 
-    // If requesting specific field
+    // Return specific field
     if (data) {
-      // Handle 'id' specially - JWT often uses 'sub' for user ID
-      if (data === 'id') {
-        return user.id || user.sub || user.userId || user._id;
-      }
       return user[data];
     }
 
-    // Return full user object with normalized id
-    return {
-      ...user,
-      id: user.id || user.sub || user.userId || user._id,
-    };
+    // Return full user object
+    return user;
   },
 );
 

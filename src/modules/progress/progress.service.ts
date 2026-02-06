@@ -75,13 +75,35 @@ export class ProgressService {
     return { total, mastered, learning, due, new: total - mastered - learning };
   }
 
+  async addWords(userId: string, wordIds: string[]) {
+    const existing = await this.prisma.progress.findMany({
+      where: { userId, wordId: { in: wordIds } },
+      select: { wordId: true },
+    });
+    const existingIds = new Set(existing.map(p => p.wordId));
+    const newWordIds = wordIds.filter(id => !existingIds.has(id));
+
+    if (newWordIds.length === 0) return { added: 0 };
+
+    await this.prisma.progress.createMany({
+      data: newWordIds.map(wordId => ({
+        userId,
+        wordId,
+        nextReviewAt: new Date(),
+      })),
+      skipDuplicates: true,
+    });
+
+    return { added: newWordIds.length };
+  }
+
   private calculateSM2(
     easeFactor: number,
     interval: number,
     repetitions: number,
     rating: 'again' | 'hard' | 'good' | 'easy',
   ) {
-    const quality = { again: 0, hard: 2, good: 3, easy: 5 }[rating];
+    const quality = { again: 0, hard: 3, good: 4, easy: 5 }[rating];
 
     if (quality < 3) {
       return { easeFactor, interval: 1, repetitions: 0 };

@@ -98,7 +98,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout' })
-  async logout(@CurrentUser('sub') userId: string, @Res() res: Response) {
+  async logout(@CurrentUser('id') userId: string, @Res() res: Response) {
     await this.authService.logout(userId);
 
     // Clear the refresh token cookie
@@ -115,7 +115,7 @@ export class AuthController {
   @Get('me')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user' })
-  getMe(@CurrentUser('sub') userId: string) {
+  getMe(@CurrentUser('id') userId: string) {
     return this.authService.getMe(userId);
   }
 }

@@ -10,11 +10,7 @@ export class AdminGuard implements CanActivate {
       throw new ForbiddenException('Không có quyền truy cập');
     }
 
-    // Check if user has admin role
-    // Điều chỉnh theo cấu trúc user của bạn
-    const isAdmin = user.role === 'admin' || user.isAdmin === true;
-
-    if (!isAdmin) {
+    if (user.role !== 'admin') {
       throw new ForbiddenException('Chỉ admin mới có quyền thực hiện thao tác này');
     }
 

@@ -46,7 +46,7 @@ export class WritingController {
   @ApiResponse({ status: 201, description: 'Đề bài đã được tạo' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
   async generatePrompt(
-    @CurrentUser('sub') userId: string,
+    @CurrentUser('id') userId: string,
     @Body() dto: CreateWritingDto,
   ) {
     return this.writingService.generatePrompt(userId, dto);
@@ -58,7 +58,7 @@ export class WritingController {
   @ApiParam({ name: 'id', description: 'Writing Session ID' })
   @ApiResponse({ status: 200, description: 'Đã lưu nháp' })
   async saveDraft(
-    @CurrentUser('sub') userId: string,
+    @CurrentUser('id') userId: string,
     @Param('id') id: string,
     @Body() dto: SubmitWritingDto,
   ) {
@@ -73,7 +73,7 @@ export class WritingController {
   @ApiResponse({ status: 400, description: 'Bài đang chấm hoặc đã chấm' })
   @HttpCode(HttpStatus.OK)
   async submitAndGrade(
-    @CurrentUser('sub') userId: string,
+    @CurrentUser('id') userId: string,
     @Param('id') id: string,
     @Body() dto: SubmitWritingDto,
   ) {
@@ -85,7 +85,7 @@ export class WritingController {
   @ApiOperation({ summary: 'Lịch sử bài viết (phân trang)' })
   @ApiResponse({ status: 200, description: 'Danh sách bài viết' })
   async getHistory(
-    @CurrentUser('sub') userId: string,
+    @CurrentUser('id') userId: string,
     @Query() query: QueryWritingHistoryDto,
   ) {
     return this.writingService.getHistory(userId, query);
@@ -95,7 +95,7 @@ export class WritingController {
   @Get('stats')
   @ApiOperation({ summary: 'Thống kê lỗi thường gặp' })
   @ApiResponse({ status: 200, description: 'Thống kê lỗi' })
-  async getErrorStats(@CurrentUser('sub') userId: string) {
+  async getErrorStats(@CurrentUser('id') userId: string) {
     return this.writingService.getErrorStats(userId);
   }
 
@@ -106,7 +106,7 @@ export class WritingController {
   @ApiResponse({ status: 200, description: 'Chi tiết bài viết' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy' })
   async getSession(
-    @CurrentUser('sub') userId: string,
+    @CurrentUser('id') userId: string,
     @Param('id') id: string,
   ) {
     return this.writingService.getSession(userId, id);
@@ -120,7 +120,7 @@ export class WritingController {
   @ApiResponse({ status: 200, description: 'Đã xóa' })
   @ApiResponse({ status: 404, description: 'Không tìm thấy' })
   async deleteSession(
-    @CurrentUser('sub') userId: string,
+    @CurrentUser('id') userId: string,
     @Param('id') id: string,
   ) {
     return this.writingService.deleteSession(userId, id);

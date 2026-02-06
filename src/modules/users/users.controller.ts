@@ -12,25 +12,25 @@ export class UsersController {
 
   @Get('profile')
   @ApiOperation({ summary: 'Get user profile' })
-  getProfile(@CurrentUser('sub') userId: string) {
+  getProfile(@CurrentUser('id') userId: string) {
     return this.usersService.getProfile(userId);
   }
 
   @Put('profile')
   @ApiOperation({ summary: 'Update profile' })
-  updateProfile(@CurrentUser('sub') userId: string, @Body() dto: UpdateProfileDto) {
+  updateProfile(@CurrentUser('id') userId: string, @Body() dto: UpdateProfileDto) {
     return this.usersService.updateProfile(userId, dto);
   }
 
   @Get('settings')
   @ApiOperation({ summary: 'Get settings' })
-  getSettings(@CurrentUser('sub') userId: string) {
+  getSettings(@CurrentUser('id') userId: string) {
     return this.usersService.getSettings(userId);
   }
 
   @Put('settings')
   @ApiOperation({ summary: 'Update settings' })
-  updateSettings(@CurrentUser('sub') userId: string, @Body() dto: UpdateSettingsDto) {
+  updateSettings(@CurrentUser('id') userId: string, @Body() dto: UpdateSettingsDto) {
     return this.usersService.updateSettings(userId, dto);
   }
 

@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ProgressService } from './progress.service';
-import { ReviewDto } from './dto/progress.dto';
+import { ReviewDto, AddWordsDto } from './dto/progress.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('progress')
@@ -12,25 +12,31 @@ export class ProgressController {
 
   @Get('due')
   @ApiOperation({ summary: 'Get due cards for review' })
-  getDue(@CurrentUser('sub') userId: string, @Query('limit') limit?: number) {
+  getDue(@CurrentUser('id') userId: string, @Query('limit') limit?: number) {
     return this.progressService.getDue(userId, limit);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all progress' })
-  getAll(@CurrentUser('sub') userId: string) {
+  getAll(@CurrentUser('id') userId: string) {
     return this.progressService.getAll(userId);
   }
 
   @Post('review')
   @ApiOperation({ summary: 'Submit review' })
-  review(@CurrentUser('sub') userId: string, @Body() dto: ReviewDto) {
+  review(@CurrentUser('id') userId: string, @Body() dto: ReviewDto) {
     return this.progressService.review(userId, dto);
+  }
+
+  @Post('add')
+  @ApiOperation({ summary: 'Add words to SRS deck' })
+  addWords(@CurrentUser('id') userId: string, @Body() dto: AddWordsDto) {
+    return this.progressService.addWords(userId, dto.wordIds);
   }
 
   @Get('stats')
   @ApiOperation({ summary: 'Get SRS stats' })
-  getStats(@CurrentUser('sub') userId: string) {
+  getStats(@CurrentUser('id') userId: string) {
     return this.progressService.getStats(userId);
   }
 }

@@ -13,25 +13,25 @@ export class GamesController {
 
   @Post('start')
   @ApiOperation({ summary: 'Start game session' })
-  startGame(@CurrentUser('sub') userId: string, @Body() dto: StartGameDto) {
+  startGame(@CurrentUser('id') userId: string, @Body() dto: StartGameDto) {
     return this.gamesService.startGame(userId, dto);
   }
 
   @Post('answer')
   @ApiOperation({ summary: 'Submit answer' })
-  submitAnswer(@CurrentUser('sub') userId: string, @Body() dto: SubmitAnswerDto) {
+  submitAnswer(@CurrentUser('id') userId: string, @Body() dto: SubmitAnswerDto) {
     return this.gamesService.submitAnswer(userId, dto);
   }
 
   @Post('end')
   @ApiOperation({ summary: 'End game session' })
-  endGame(@CurrentUser('sub') userId: string, @Body() dto: EndGameDto) {
+  endGame(@CurrentUser('id') userId: string, @Body() dto: EndGameDto) {
     return this.gamesService.endGame(userId, dto);
   }
 
   @Get('history')
   @ApiOperation({ summary: 'Get game history' })
-  getHistory(@CurrentUser('sub') userId: string, @Query('limit') limit?: number) {
+  getHistory(@CurrentUser('id') userId: string, @Query('limit') limit?: number) {
     return this.gamesService.getHistory(userId, limit);
   }
 

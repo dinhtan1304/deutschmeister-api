@@ -10,8 +10,6 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Req,
-  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -30,40 +28,15 @@ import {
   TopicResponseDto,
   TopicWithWordsDto,
 } from './dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { Request } from 'express';
-
-// Extend Request to include user
-interface AuthRequest extends Request {
-  user?: {
-    id?: string;
-    sub?: string;
-    userId?: string;
-    email?: string;
-  };
-}
 
 @ApiTags('Topics')
 @Controller('topics')
 export class TopicsController {
   constructor(private readonly topicsService: TopicsService) {}
-
-  // Helper to get userId from request
-  private getUserId(req: AuthRequest): string {
-    const user = req.user;
-    if (!user) {
-      throw new BadRequestException('User not found in request');
-    }
-    // Try different possible fields for user ID
-    const userId = user.id || user.sub || user.userId;
-    if (!userId) {
-      throw new BadRequestException('User ID not found');
-    }
-    return userId;
-  }
 
   // ============================================
   // PUBLIC ENDPOINTS
@@ -90,8 +63,7 @@ export class TopicsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Lấy progress của user cho tất cả topics' })
   @ApiResponse({ status: 200, description: 'Progress theo từng topic' })
-  async getUserProgress(@Req() req: AuthRequest) {
-    const userId = this.getUserId(req);
+  async getUserProgress(@CurrentUser('id') userId: string) {
     return this.topicsService.getUserProgress(userId);
   }
 
@@ -121,12 +93,10 @@ export class TopicsController {
   @ApiParam({ name: 'topicId', description: 'Topic ID' })
   @ApiResponse({ status: 200, description: 'Progress đã cập nhật' })
   async updateProgress(
-    @Req() req: AuthRequest,
+    @CurrentUser('id') userId: string,
     @Param('topicId') topicId: string,
     @Body('wordsLearned') wordsLearned: number,
   ) {
-    const userId = this.getUserId(req);
-    console.log('Updating progress for userId:', userId, 'topicId:', topicId, 'wordsLearned:', wordsLearned);
     return this.topicsService.updateProgress(userId, topicId, wordsLearned);
   }
 

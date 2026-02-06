@@ -24,6 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user || !user.isActive) {
       throw new UnauthorizedException();
     }
-    return { sub: user.id, email: user.email, name: user.name };
+    // Trả về cả 'id' và 'sub' để tương thích với tất cả controller
+    return { id: user.id, sub: user.id, email: user.email, name: user.name };
   }
 }
