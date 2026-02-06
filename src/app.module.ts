@@ -13,6 +13,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TopicsModule } from './modules/topics/topics.module';
 import { PersonalWordsModule } from './modules/personal-words';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { WritingModule } from './modules/writing/writing.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     TopicsModule,
     PersonalWordsModule,
     DashboardModule,
+    WritingModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -8,23 +8,24 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String    @map("password_hash")
-  name          String?
-  avatar        String?
-  isActive      Boolean   @default(true) @map("is_active")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  name            String?
+  avatar          String?
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  settings      Settings?
-  favorites     Favorite[]
-  history       History[]
-  gameSessions  GameSession[]
-  progress      Progress[]
-  refreshTokens RefreshToken[]
-  personalWords PersonalWord[]
-  topicProgress TopicProgress[]
+  settings        Settings?
+  favorites       Favorite[]
+  history         History[]
+  gameSessions    GameSession[]
+  progress        Progress[]
+  refreshTokens   RefreshToken[]
+  personalWords   PersonalWord[]
+  topicProgress   TopicProgress[]
+  writingSessions WritingSession[]
   @@map("users")
 }
 
@@ -303,3 +304,67 @@ model TopicProgress {
   @@map("topic_progress")
 }
 
+model WritingSession {
+  id            String        @id @default(cuid())
+  userId        String        @map("user_id")
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Cấu hình đề bài ──
+  topic         String                  // Chủ đề: "Wohnung", "Einkaufen", hoặc custom
+  cefrLevel     String        @map("cefr_level")    // A1, A2, B1, B2
+  writingType   String        @map("writing_type")  // email, brief, beschreibung...
+  wordCountMin  Int           @map("word_count_min")
+  wordCountMax  Int           @map("word_count_max")
+
+  // ── Đề bài do AI tạo ──
+  prompt        String        @db.Text              // Đề bài tiếng Đức
+  vocabHints    Json?         @map("vocab_hints")   // ["die Wohnung (căn hộ)", ...]
+  grammarHints  Json?         @map("grammar_hints") // ["sein + Adjektiv (là + tính từ)", ...]
+
+  // ── Bài viết của user ──
+  userText      String?       @map("user_text") @db.Text
+  wordCount     Int?          @map("word_count")
+  submittedAt   DateTime?     @map("submitted_at")
+
+  // ── Kết quả chấm bài ──
+  overallScore  Float?        @map("overall_score")   // 0-100
+  correctedText String?       @map("corrected_text") @db.Text
+  feedbackDe    String?       @map("feedback_de") @db.Text     // Nhận xét tiếng Đức
+  feedbackVi    String?       @map("feedback_vi") @db.Text     // Nhận xét tiếng Việt
+  strengths     Json?                                           // ["Guter Wortschatz", ...]
+  improvements  Json?                                           // ["Artikel üben", ...]
+  gradedAt      DateTime?     @map("graded_at")
+
+  // ── Trạng thái ──
+  status        String        @default("DRAFT")     // DRAFT, SUBMITTED, GRADING, GRADED, ERROR
+
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  errors        WritingError[]
+
+  @@index([userId, status])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("writing_sessions")
+}
+
+model WritingError {
+  id               String         @id @default(cuid())
+  writingSessionId String         @map("writing_session_id")
+  session          WritingSession @relation(fields: [writingSessionId], references: [id], onDelete: Cascade)
+
+  errorType      String   @map("error_type")       // article, grammar, word_order, conjugation, case, spelling, vocabulary
+  severity       String                             // error, warning, suggestion
+  originalText   String   @map("original_text")     // Đoạn sai
+  correctedText  String   @map("corrected_text")    // Đoạn đúng
+  explanationDe  String   @map("explanation_de") @db.Text  // Giải thích tiếng Đức
+  explanationVi  String   @map("explanation_vi") @db.Text  // Giải thích tiếng Việt
+  position       Int?                               // Vị trí trong bài (character index)
+
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([writingSessionId])
+  @@index([errorType])
+  @@map("writing_errors")
+}
