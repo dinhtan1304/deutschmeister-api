@@ -58,6 +58,8 @@ export class GamesService {
       data: {
         score: dto.score,
         bestStreak: dto.bestStreak,
+        correctAnswers: dto.correctAnswers,
+        wrongAnswers: dto.wrongAnswers,
         endedAt: new Date(),
         duration: Math.floor((Date.now() - session.startedAt.getTime()) / 1000),
       },

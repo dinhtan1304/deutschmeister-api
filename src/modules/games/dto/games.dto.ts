@@ -61,4 +61,14 @@ export class EndGameDto {
   @ApiProperty()
   @IsInt()
   bestStreak: number;
+
+  @ApiProperty({ description: 'Số câu trả lời đúng' })
+  @IsInt()
+  @Min(0)
+  correctAnswers: number;
+
+  @ApiProperty({ description: 'Số câu trả lời sai' })
+  @IsInt()
+  @Min(0)
+  wrongAnswers: number;
 }
