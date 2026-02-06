@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { WritingService } from './writing.service';
 import { CreateWritingDto, SubmitWritingDto, QueryWritingHistoryDto } from './dto';
 
@@ -31,6 +32,7 @@ export class WritingController {
   constructor(private readonly writingService: WritingService) {}
 
   // ── GET /writing/topics?level=A1 ──
+  @Public()
   @Get('topics')
   @ApiOperation({ summary: 'Lấy gợi ý chủ đề + dạng bài theo CEFR level' })
   @ApiResponse({ status: 200, description: 'Danh sách chủ đề, dạng bài, gợi ý độ dài' })
