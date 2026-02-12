@@ -33,6 +33,12 @@ export class DashboardStatsDto {
 
   @ApiProperty({ example: '2024-01-15', description: 'Ngày bắt đầu học' })
   startedAt: string;
+
+  @ApiProperty({ example: 3, description: 'Số bài ngữ pháp đã hoàn thành' })
+  grammarCompleted: number;
+
+  @ApiProperty({ example: 10, description: 'Tổng số bài ngữ pháp' })
+  grammarTotal: number;
 }
 
 // ============================================
@@ -119,7 +125,7 @@ export class TopicProgressDto {
 // Recent Activity
 // ============================================
 export class RecentActivityDto {
-  @ApiProperty({ example: 'game', enum: ['game', 'word', 'topic', 'review'] })
+  @ApiProperty({ example: 'game', enum: ['game', 'word', 'topic', 'review', 'grammar'] })
   type: string;
 
   @ApiProperty({ example: 'Chơi Quick Quiz - 8/10 đúng' })

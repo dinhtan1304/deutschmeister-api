@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '@prisma/client';
+import { calculateSM2, nextReviewDate, isCorrectRating, SM2Rating } from '../../common/utils/sm2';
 import {
   CreatePersonalWordDto,
   UpdatePersonalWordDto,
@@ -539,17 +540,11 @@ export class PersonalWordsService {
   async reviewWord(userId: string, dto: ReviewPersonalWordDto) {
     const word = await this.findOne(userId, dto.wordId);
 
-    // Calculate new SM-2 parameters
-    const { easeFactor, interval, repetitions } = this.calculateSM2(
-      word.easeFactor,
-      word.interval,
-      word.repetitions,
-      dto.rating,
+    // Calculate new SM-2 parameters (shared utility)
+    const { easeFactor, interval, repetitions } = calculateSM2(
+      { easeFactor: word.easeFactor, interval: word.interval, repetitions: word.repetitions },
+      dto.rating as SM2Rating,
     );
-
-    // Calculate next review date
-    const nextReviewAt = new Date();
-    nextReviewAt.setDate(nextReviewAt.getDate() + interval);
 
     // Update word
     return this.prisma.personalWord.update({
@@ -558,10 +553,10 @@ export class PersonalWordsService {
         easeFactor,
         interval,
         repetitions,
-        nextReviewAt,
+        nextReviewAt: nextReviewDate(interval),
         lastReviewAt: new Date(),
         totalReviews: { increment: 1 },
-        correctCount: { increment: dto.rating !== SRSRating.AGAIN ? 1 : 0 },
+        correctCount: { increment: isCorrectRating(dto.rating as SM2Rating) ? 1 : 0 },
       },
     });
   }
@@ -713,11 +708,12 @@ export class PersonalWordsService {
     interval: number;
     repetitions: number;
   }): IntervalPreviewDto {
+    const input = { easeFactor: word.easeFactor, interval: word.interval, repetitions: word.repetitions };
     return {
       again: 1,
-      hard: this.calculateSM2(word.easeFactor, word.interval, word.repetitions, SRSRating.HARD).interval,
-      good: this.calculateSM2(word.easeFactor, word.interval, word.repetitions, SRSRating.GOOD).interval,
-      easy: this.calculateSM2(word.easeFactor, word.interval, word.repetitions, SRSRating.EASY).interval,
+      hard: calculateSM2(input, 'hard').interval,
+      good: calculateSM2(input, 'good').interval,
+      easy: calculateSM2(input, 'easy').interval,
     };
   }
 
@@ -761,47 +757,4 @@ export class PersonalWordsService {
     return { reset: result.count };
   }
 
-  /**
-   * SM-2 Algorithm Implementation
-   */
-  private calculateSM2(
-    easeFactor: number,
-    interval: number,
-    repetitions: number,
-    rating: SRSRating,
-  ): { easeFactor: number; interval: number; repetitions: number } {
-    // Map rating to quality (0-5)
-    const quality = {
-      [SRSRating.AGAIN]: 0,
-      [SRSRating.HARD]: 3,
-      [SRSRating.GOOD]: 4,
-      [SRSRating.EASY]: 5,
-    }[rating];
-
-    // Failed (quality < 3) - reset
-    if (quality < 3) {
-      return { easeFactor, interval: 1, repetitions: 0 };
-    }
-
-    // Calculate new ease factor
-    // EF' = EF + (0.1 - (5-q) * (0.08 + (5-q) * 0.02))
-    let newEF = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-    newEF = Math.max(1.3, newEF); // Minimum EF is 1.3
-
-    // Calculate new interval
-    let newInterval: number;
-    if (repetitions === 0) {
-      newInterval = 1;
-    } else if (repetitions === 1) {
-      newInterval = 6;
-    } else {
-      newInterval = Math.round(interval * newEF);
-    }
-
-    return {
-      easeFactor: Math.round(newEF * 100) / 100,
-      interval: newInterval,
-      repetitions: repetitions + 1,
-    };
-  }
 }

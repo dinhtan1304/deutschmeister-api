@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { ReviewDto } from './dto/progress.dto';
+import { calculateSM2, nextReviewDate, isCorrectRating, SM2Rating } from '../../common/utils/sm2';
 
 @Injectable()
 export class ProgressService {
@@ -38,16 +39,11 @@ export class ProgressService {
       });
     }
 
-    // SM-2 Algorithm
-    const { easeFactor, interval, repetitions } = this.calculateSM2(
-      progress.easeFactor,
-      progress.interval,
-      progress.repetitions,
-      dto.rating,
+    // SM-2 Algorithm (shared utility)
+    const { easeFactor, interval, repetitions } = calculateSM2(
+      { easeFactor: progress.easeFactor, interval: progress.interval, repetitions: progress.repetitions },
+      dto.rating as SM2Rating,
     );
-
-    const nextReviewAt = new Date();
-    nextReviewAt.setDate(nextReviewAt.getDate() + interval);
 
     return this.prisma.progress.update({
       where: { id: progress.id },
@@ -55,10 +51,10 @@ export class ProgressService {
         easeFactor,
         interval,
         repetitions,
-        nextReviewAt,
+        nextReviewAt: nextReviewDate(interval),
         lastReviewAt: new Date(),
         totalReviews: { increment: 1 },
-        correctCount: { increment: dto.rating !== 'again' ? 1 : 0 },
+        correctCount: { increment: isCorrectRating(dto.rating as SM2Rating) ? 1 : 0 },
       },
       include: { word: true },
     });
@@ -97,34 +93,4 @@ export class ProgressService {
     return { added: newWordIds.length };
   }
 
-  private calculateSM2(
-    easeFactor: number,
-    interval: number,
-    repetitions: number,
-    rating: 'again' | 'hard' | 'good' | 'easy',
-  ) {
-    const quality = { again: 0, hard: 3, good: 4, easy: 5 }[rating];
-
-    if (quality < 3) {
-      return { easeFactor, interval: 1, repetitions: 0 };
-    }
-
-    let newEF = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-    newEF = Math.max(1.3, newEF);
-
-    let newInterval: number;
-    if (repetitions === 0) {
-      newInterval = 1;
-    } else if (repetitions === 1) {
-      newInterval = 6;
-    } else {
-      newInterval = Math.round(interval * newEF);
-    }
-
-    return {
-      easeFactor: newEF,
-      interval: newInterval,
-      repetitions: repetitions + 1,
-    };
-  }
 }

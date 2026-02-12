@@ -48,9 +48,12 @@ export class DashboardService {
       wordsToReview,
       userProgress,
       firstActivity,
-      // NEW: sum of wordsLearned from topicProgress
+      // sum of wordsLearned from topicProgress
       topicWordsAggregate,
       firstTopicActivity,
+      // Grammar stats
+      grammarCompleted,
+      grammarTotal,
     ] = await Promise.all([
       // Words learned (from SRS progress table with repetitions > 0)
       this.prisma.progress.count({
@@ -92,16 +95,24 @@ export class DashboardService {
         orderBy: { startedAt: 'asc' },
         select: { startedAt: true },
       }),
-      // NEW: Total words learned across all topics
+      // Total words learned across all topics
       this.prisma.topicProgress.aggregate({
         where: { userId },
         _sum: { wordsLearned: true },
       }),
-      // NEW: First topic study activity
+      // First topic study activity
       this.prisma.topicProgress.findFirst({
         where: { userId },
         orderBy: { createdAt: 'asc' },
         select: { createdAt: true },
+      }),
+      // Grammar: completed lessons
+      this.prisma.grammarProgress.count({
+        where: { userId, status: 'completed' },
+      }),
+      // Grammar: total active lessons
+      this.prisma.grammarLesson.count({
+        where: { isActive: true },
       }),
     ]);
 
@@ -120,11 +131,11 @@ export class DashboardService {
     // Calculate streak
     const streak = await this.calculateStreak(userId);
 
-    // FIX: Use the greater of SRS words or topic words learned
+    // Use the greater of SRS words or topic words learned
     const topicWordsLearned = topicWordsAggregate._sum.wordsLearned || 0;
     const totalWordsLearned = Math.max(srsWordsLearned, topicWordsLearned);
 
-    // FIX: Consider all activity sources for start date
+    // Consider all activity sources for start date
     const startedAt =
       userProgress?.createdAt ||
       firstActivity?.startedAt ||
@@ -142,6 +153,8 @@ export class DashboardService {
       wordsToReview,
       gamesPlayed: gameStats._count || 0,
       startedAt: this.toLocalDateStr(startedAt),
+      grammarCompleted,
+      grammarTotal,
     };
   }
 
@@ -153,8 +166,7 @@ export class DashboardService {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 365);
 
-    // FIX: Get ALL activity sources including topicProgress
-    const [gameActivities, reviewActivities, topicActivities] = await Promise.all([
+    const [gameActivities, reviewActivities, topicActivities, grammarActivities] = await Promise.all([
       // Game sessions
       this.prisma.gameSession.findMany({
         where: {
@@ -171,7 +183,7 @@ export class DashboardService {
         },
         select: { lastReviewAt: true },
       }),
-      // NEW: Topic study activities
+      // Topic study activities
       this.prisma.topicProgress.findMany({
         where: {
           userId,
@@ -182,18 +194,24 @@ export class DashboardService {
         },
         select: { lastStudiedAt: true, updatedAt: true, wordsLearned: true },
       }),
+      // Grammar exercise submissions
+      this.prisma.grammarProgress.findMany({
+        where: {
+          userId,
+          lastAttemptAt: { gte: startDate, lte: endDate },
+        },
+        select: { lastAttemptAt: true, totalAttempts: true },
+      }),
     ]);
 
     // Aggregate by date
     const activityMap = new Map<string, number>();
 
-    // Add game activities (count per date)
     gameActivities.forEach((g) => {
       const date = this.toLocalDateStr(g.startedAt);
       activityMap.set(date, (activityMap.get(date) || 0) + 1);
     });
 
-    // Add SRS review activities
     reviewActivities.forEach((r) => {
       if (r.lastReviewAt) {
         const date = this.toLocalDateStr(r.lastReviewAt);
@@ -201,14 +219,20 @@ export class DashboardService {
       }
     });
 
-    // NEW: Add topic study activities (count wordsLearned as activity)
     topicActivities.forEach((t) => {
       const date = t.lastStudiedAt
         ? this.toLocalDateStr(t.lastStudiedAt)
         : this.toLocalDateStr(t.updatedAt);
-      // Count each topic study as activities proportional to words learned
       const count = Math.max(t.wordsLearned, 1);
       activityMap.set(date, (activityMap.get(date) || 0) + count);
+    });
+
+    // Grammar activities
+    grammarActivities.forEach((g) => {
+      if (g.lastAttemptAt) {
+        const date = this.toLocalDateStr(g.lastAttemptAt);
+        activityMap.set(date, (activityMap.get(date) || 0) + 1);
+      }
     });
 
     // Build heatmap data
@@ -219,7 +243,6 @@ export class DashboardService {
       const dateStr = this.toLocalDateStr(current);
       const count = activityMap.get(dateStr) || 0;
 
-      // Calculate level (0-4) based on activity count
       let level = 0;
       if (count > 0) level = 1;
       if (count >= 3) level = 2;
@@ -230,7 +253,6 @@ export class DashboardService {
       current.setDate(current.getDate() + 1);
     }
 
-    // Calculate streaks
     const { currentStreak, longestStreak } = this.calculateStreaksFromData(data);
     const totalActiveDays = data.filter((d) => d.count > 0).length;
 
@@ -248,7 +270,6 @@ export class DashboardService {
   async getWeeklyProgress(userId: string): Promise<WeeklyProgressDto[]> {
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    // Calculate date range
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 
@@ -256,8 +277,7 @@ export class DashboardService {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     sevenDaysAgo.setHours(0, 0, 0, 0);
 
-    // FIX: 3 queries instead of 2 - include topicProgress
-    const [gameSessions, progressData, topicStudyData] = await Promise.all([
+    const [gameSessions, progressData, topicStudyData, grammarData] = await Promise.all([
       this.prisma.gameSession.findMany({
         where: {
           userId,
@@ -275,7 +295,6 @@ export class DashboardService {
         },
         select: { createdAt: true, lastReviewAt: true },
       }),
-      // NEW: Topic study data
       this.prisma.topicProgress.findMany({
         where: {
           userId,
@@ -286,6 +305,14 @@ export class DashboardService {
         },
         select: { lastStudiedAt: true, updatedAt: true, wordsLearned: true },
       }),
+      // Grammar submissions in last 7 days
+      this.prisma.grammarProgress.findMany({
+        where: {
+          userId,
+          lastAttemptAt: { gte: sevenDaysAgo, lte: today },
+        },
+        select: { lastAttemptAt: true },
+      }),
     ]);
 
     // Aggregate in memory by date
@@ -294,7 +321,6 @@ export class DashboardService {
       { gamesPlayed: number; duration: number; wordsLearned: number }
     >();
 
-    // Initialize all 7 days
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
@@ -302,7 +328,6 @@ export class DashboardService {
       dateMap.set(dateStr, { gamesPlayed: 0, duration: 0, wordsLearned: 0 });
     }
 
-    // Aggregate game sessions
     gameSessions.forEach((g) => {
       const dateStr = this.toLocalDateStr(g.startedAt);
       const entry = dateMap.get(dateStr);
@@ -312,7 +337,6 @@ export class DashboardService {
       }
     });
 
-    // Aggregate SRS progress (count unique activities per day)
     const progressPerDay = new Map<string, Set<string>>();
     progressData.forEach((p) => {
       if (p.createdAt) {
@@ -327,7 +351,6 @@ export class DashboardService {
       }
     });
 
-    // Add SRS progress counts to dateMap
     progressPerDay.forEach((set, dateStr) => {
       const entry = dateMap.get(dateStr);
       if (entry) {
@@ -335,7 +358,6 @@ export class DashboardService {
       }
     });
 
-    // NEW: Add topic study wordsLearned
     topicStudyData.forEach((t) => {
       const date = t.lastStudiedAt
         ? this.toLocalDateStr(t.lastStudiedAt)
@@ -343,6 +365,17 @@ export class DashboardService {
       const entry = dateMap.get(date);
       if (entry) {
         entry.wordsLearned += t.wordsLearned;
+      }
+    });
+
+    // Grammar activities count as games played
+    grammarData.forEach((g) => {
+      if (g.lastAttemptAt) {
+        const dateStr = this.toLocalDateStr(g.lastAttemptAt);
+        const entry = dateMap.get(dateStr);
+        if (entry) {
+          entry.gamesPlayed++;
+        }
       }
     });
 
@@ -417,8 +450,7 @@ export class DashboardService {
   async getRecentActivity(userId: string, limit = 10): Promise<RecentActivityDto[]> {
     const activities: RecentActivityDto[] = [];
 
-    // FIX: Get ALL activity sources including topicProgress
-    const [recentGames, recentProgress, recentTopicStudy] = await Promise.all([
+    const [recentGames, recentProgress, recentTopicStudy, recentGrammar] = await Promise.all([
       // Get recent game sessions
       this.prisma.gameSession.findMany({
         where: { userId },
@@ -443,7 +475,7 @@ export class DashboardService {
           },
         },
       }),
-      // NEW: Get recent topic study activities
+      // Get recent topic study activities
       this.prisma.topicProgress.findMany({
         where: { userId, lastStudiedAt: { not: null } },
         orderBy: { lastStudiedAt: 'desc' },
@@ -451,6 +483,17 @@ export class DashboardService {
         include: {
           topic: {
             select: { nameVi: true, nameDe: true, icon: true },
+          },
+        },
+      }),
+      // Get recent grammar submissions
+      this.prisma.grammarProgress.findMany({
+        where: { userId, lastAttemptAt: { not: null } },
+        orderBy: { lastAttemptAt: 'desc' },
+        take: limit,
+        include: {
+          lesson: {
+            select: { titleVi: true, titleDe: true, level: true },
           },
         },
       }),
@@ -485,7 +528,7 @@ export class DashboardService {
       }
     });
 
-    // NEW: Add topic study activities
+    // Add topic study activities
     recentTopicStudy.forEach((tp) => {
       if (tp.lastStudiedAt) {
         activities.push({
@@ -493,6 +536,22 @@ export class DashboardService {
           description: `Học ${tp.topic.nameVi || tp.topic.nameDe} - ${tp.wordsLearned} từ`,
           timestamp: tp.lastStudiedAt.toISOString(),
           metadata: tp.topicId,
+        });
+      }
+    });
+
+    // Add grammar activities
+    recentGrammar.forEach((gp) => {
+      if (gp.lastAttemptAt) {
+        const statusText = gp.status === 'completed'
+          ? `✅ Hoàn thành ${Math.round(gp.score ?? 0)}%`
+          : `📝 ${gp.correctCount}/${gp.totalAttempts > 0 ? 'đang làm' : 'bắt đầu'}`;
+
+        activities.push({
+          type: 'grammar',
+          description: `Ngữ pháp ${gp.lesson.level}: ${gp.lesson.titleVi} - ${statusText}`,
+          timestamp: gp.lastAttemptAt.toISOString(),
+          metadata: gp.lessonId,
         });
       }
     });
@@ -517,8 +576,7 @@ export class DashboardService {
     const sixtyDaysAgo = new Date(today);
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
-    // FIX: 3 queries - include topicProgress
-    const [gameSessions, progressReviews, topicStudy] = await Promise.all([
+    const [gameSessions, progressReviews, topicStudy, grammarStudy] = await Promise.all([
       this.prisma.gameSession.findMany({
         where: {
           userId,
@@ -533,7 +591,6 @@ export class DashboardService {
         },
         select: { lastReviewAt: true },
       }),
-      // NEW: Topic study dates
       this.prisma.topicProgress.findMany({
         where: {
           userId,
@@ -544,9 +601,17 @@ export class DashboardService {
         },
         select: { lastStudiedAt: true, updatedAt: true },
       }),
+      // Grammar study dates
+      this.prisma.grammarProgress.findMany({
+        where: {
+          userId,
+          lastAttemptAt: { gte: sixtyDaysAgo },
+        },
+        select: { lastAttemptAt: true },
+      }),
     ]);
 
-    // Build set of active dates (in memory)
+    // Build set of active dates
     const activeDates = new Set<string>();
 
     gameSessions.forEach((g) => {
@@ -559,13 +624,19 @@ export class DashboardService {
       }
     });
 
-    // NEW: Add topic study dates
     topicStudy.forEach((t) => {
       if (t.lastStudiedAt) {
         activeDates.add(this.toLocalDateStr(t.lastStudiedAt));
       }
       if (t.updatedAt) {
         activeDates.add(this.toLocalDateStr(t.updatedAt));
+      }
+    });
+
+    // Grammar dates
+    grammarStudy.forEach((g) => {
+      if (g.lastAttemptAt) {
+        activeDates.add(this.toLocalDateStr(g.lastAttemptAt));
       }
     });
 
@@ -582,7 +653,6 @@ export class DashboardService {
         currentDate.setDate(currentDate.getDate() - 1);
         checkedToday = true;
       } else {
-        // If today has no activity yet, check yesterday
         if (!checkedToday && i === 0) {
           currentDate.setDate(currentDate.getDate() - 1);
           checkedToday = true;
@@ -602,7 +672,6 @@ export class DashboardService {
     let longestStreak = 0;
     let tempStreak = 0;
 
-    // Calculate from most recent (end of array)
     for (let i = data.length - 1; i >= 0; i--) {
       if (data[i].count > 0) {
         tempStreak++;

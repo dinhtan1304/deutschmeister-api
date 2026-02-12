@@ -1,5 +1,5 @@
-import { IsOptional, IsString, IsEnum } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsEnum, IsNotEmpty, IsObject } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class QueryLessonsDto {
     @ApiPropertyOptional({ description: 'Filter by CEFR level', enum: ['A1', 'A2', 'B1'] })
@@ -9,7 +9,9 @@ export class QueryLessonsDto {
 }
 
 export class SubmitExerciseDto {
-    @ApiPropertyOptional({ description: 'Array of answers indexed by exercise order' })
+    @ApiProperty({ description: 'Answers indexed by exercise order, e.g. { "1": "0", "2": "ä" }' })
+    @IsNotEmpty()
+    @IsObject()
     answers: Record<number, string | string[]>;
 }
 
