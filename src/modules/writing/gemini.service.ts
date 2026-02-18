@@ -30,6 +30,51 @@ export interface GradingError {
   position: number;
 }
 
+export interface GrammarAnalysisResult {
+  /** Câu gốc */
+  sentence: string;
+  /** Câu đã sửa (nếu có lỗi) */
+  correctedSentence: string;
+  /** Có lỗi ngữ pháp không */
+  hasErrors: boolean;
+  /** Thì của câu (Präsens, Perfekt, Präteritum...) */
+  tense: string;
+  tenseVi: string;
+  /** Loại câu (Aussagesatz, Fragesatz, Imperativ...) */
+  sentenceType: string;
+  sentenceTypeVi: string;
+  /** Phân tích từng thành phần */
+  components: GrammarComponent[];
+  /** Giải thích tổng quan bằng tiếng Việt */
+  explanationVi: string;
+  /** Quy tắc ngữ pháp liên quan */
+  grammarRules: GrammarRule[];
+  /** Mẹo ghi nhớ */
+  tipVi: string;
+}
+
+export interface GrammarComponent {
+  /** Text gốc: "Der Apfel" */
+  text: string;
+  /** Vai trò: subject, verb, object, adverb, preposition... */
+  role: string;
+  /** Vai trò tiếng Việt: "Chủ ngữ", "Động từ"... */
+  roleVi: string;
+  /** Case (nếu có): Nominativ, Akkusativ, Dativ, Genitiv */
+  case?: string;
+  caseVi?: string;
+  /** Giải thích ngắn tiếng Việt */
+  noteVi: string;
+}
+
+export interface GrammarRule {
+  /** Tên quy tắc: "Verbposition im Aussagesatz" */
+  rule: string;
+  /** Giải thích tiếng Việt */
+  ruleVi: string;
+}
+
+
 @Injectable()
 export class GeminiService {
   private readonly logger = new Logger(GeminiService.name);
@@ -283,4 +328,84 @@ Bitte korrigiere und bewerte diesen Text ausführlich.`;
     };
     return map[type] || type;
   }
+
+  async analyzeGrammar(sentence: string, cefrLevel?: string): Promise<GrammarAnalysisResult> {
+  const level = cefrLevel || 'A1';
+
+  const systemInstruction = `Du bist ein erfahrener Deutschlehrer für vietnamesische Lerner.
+
+AUFGABE: Analysiere den folgenden deutschen Satz grammatisch.
+
+REGELN:
+- Erkläre auf dem Niveau ${level} — einfach und verständlich
+- Alle vietnamesischen Erklärungen (roleVi, caseVi, noteVi, explanationVi, ruleVi, tenseVi, sentenceTypeVi, tipVi) MÜSSEN auf Vietnamesisch sein
+- Alle deutschen Felder (role, case, rule, tense, sentenceType) MÜSSEN auf Deutsch sein
+- Zerlege den Satz in grammatische Bestandteile (subject, verb, object, adverb, preposition, conjunction, etc.)
+- Identifiziere Tempus, Satztyp und Kasus
+- Gib praktische Tipps zum Merken auf Vietnamesisch
+- Wenn der Satz Fehler hat, korrigiere ihn in correctedSentence`;
+
+  const userPrompt = `Analysiere diesen Satz: "${sentence}"`;
+
+  const responseSchema = {
+    type: 'OBJECT' as const,
+    properties: {
+      sentence: { type: 'STRING' as const },
+      correctedSentence: { type: 'STRING' as const },
+      hasErrors: { type: 'BOOLEAN' as const },
+      tense: { type: 'STRING' as const },
+      tenseVi: { type: 'STRING' as const },
+      sentenceType: { type: 'STRING' as const },
+      sentenceTypeVi: { type: 'STRING' as const },
+      components: {
+        type: 'ARRAY' as const,
+        items: {
+          type: 'OBJECT' as const,
+          properties: {
+            text: { type: 'STRING' as const },
+            role: { type: 'STRING' as const },
+            roleVi: { type: 'STRING' as const },
+            case: { type: 'STRING' as const },
+            caseVi: { type: 'STRING' as const },
+            noteVi: { type: 'STRING' as const },
+          },
+          required: ['text', 'role', 'roleVi', 'noteVi'],
+        },
+      },
+      explanationVi: { type: 'STRING' as const },
+      grammarRules: {
+        type: 'ARRAY' as const,
+        items: {
+          type: 'OBJECT' as const,
+          properties: {
+            rule: { type: 'STRING' as const },
+            ruleVi: { type: 'STRING' as const },
+          },
+          required: ['rule', 'ruleVi'],
+        },
+      },
+      tipVi: { type: 'STRING' as const },
+    },
+    required: [
+      'sentence', 'correctedSentence', 'hasErrors',
+      'tense', 'tenseVi', 'sentenceType', 'sentenceTypeVi',
+      'components', 'explanationVi', 'grammarRules', 'tipVi',
+    ],
+  };
+
+  const response = await this.ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: userPrompt,
+    config: {
+      systemInstruction,
+      responseMimeType: 'application/json',
+      responseSchema,
+      temperature: 0.3,
+    },
+  });
+
+  return JSON.parse(response.text as any) as GrammarAnalysisResult;
 }
+}
+
+

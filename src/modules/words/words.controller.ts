@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { WordsService } from './words.service';
 import { SearchWordsDto, RandomWordsDto } from './dto/words.dto';
 import { Public } from '../../common/decorators/public.decorator';
@@ -28,6 +28,13 @@ export class WordsController {
   @ApiOperation({ summary: 'Get word statistics' })
   getStats() {
     return this.wordsService.getStats();
+  }
+
+  @Get('level-index')
+  @ApiOperation({ summary: 'Lấy vocabulary level index (word → level) cho Word Highlighting' })
+  @ApiResponse({ status: 200, description: 'Map { word: level }' })
+  async getLevelIndex() {
+    return this.wordsService.getLevelIndex();
   }
 
   @Public()

@@ -31,6 +31,7 @@ import {
   BatchReviewDto,
   SRSQueryDto,
 } from './dto/personal-words.dto';
+import { QuickAddWordDto } from './dto/quick-add-word.dto';
 
 @ApiTags('personal-words')
 @ApiBearerAuth()
@@ -90,6 +91,38 @@ export class PersonalWordsController {
     );
     res.send(tsv);
   }
+  // ================================================================
+// THÊM VÀO FILE: src/modules/personal-words/personal-words.controller.ts
+//
+// 1. Import thêm QuickAddWordDto ở đầu file
+// 2. Đặt 2 endpoints này TRƯỚC route @Get(':id') để tránh conflict
+// ================================================================
+
+// ── THÊM IMPORT ──
+// import { QuickAddWordDto } from './dto/quick-add-word.dto';
+
+// ── ENDPOINT 1: Check từ đã có trong Word Bank chưa ──
+@Get('check-word')
+@ApiOperation({ summary: 'Kiểm tra từ đã có trong Word Bank chưa' })
+@ApiResponse({ status: 200, description: '{ exists: boolean, personalWordId: string | null }' })
+async checkWordExists(
+  @CurrentUser('sub') userId: string,
+  @Query('word') word: string,
+) {
+  return this.service.checkWordExists(userId, word);
+}
+
+// ── ENDPOINT 2: Thêm nhanh từ vào Word Bank từ Dictionary Popup ──
+@Post('quick-add')
+@ApiOperation({ summary: 'Thêm nhanh từ vào Word Bank từ Dictionary Popup' })
+@ApiResponse({ status: 201, description: 'Từ đã được thêm' })
+@ApiResponse({ status: 409, description: 'Từ đã tồn tại' })
+async quickAddFromDictionary(
+  @CurrentUser('sub') userId: string,
+  @Body() dto: QuickAddWordDto,
+) {
+  return this.service.quickAddFromDictionary(userId, dto);
+}
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết một từ' })

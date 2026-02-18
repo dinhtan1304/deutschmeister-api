@@ -25,6 +25,7 @@ import {
   SRSStatsDto,
   IntervalPreviewDto,
 } from './dto/personal-words.dto';
+import { QuickAddWordDto } from './dto/quick-add-word.dto';
 
 @Injectable()
 export class PersonalWordsService {
@@ -756,5 +757,63 @@ export class PersonalWordsService {
 
     return { reset: result.count };
   }
+  // ================================================================
+// THÊM VÀO FILE: src/modules/personal-words/personal-words.service.ts
+//
+// 1. Import thêm ConflictException: import { ConflictException } from '@nestjs/common';
+// 2. Import thêm QuickAddWordDto: import { QuickAddWordDto } from './dto/quick-add-word.dto';
+// 3. Copy 2 methods dưới đây vào class PersonalWordsService
+// ================================================================
+
+// ── METHOD 1: Check từ đã tồn tại trong Word Bank ──
+async checkWordExists(userId: string, word: string) {
+  if (!word || !word.trim()) {
+    return { exists: false, personalWordId: null };
+  }
+
+  const normalized = word.trim().toLowerCase();
+
+  const existing = await this.prisma.personalWord.findFirst({
+    where: {
+      userId,
+      word: { equals: normalized, mode: 'insensitive' },
+    },
+    select: { id: true },
+  });
+
+  return {
+    exists: !!existing,
+    personalWordId: existing?.id || null,
+  };
+}
+
+// ── METHOD 2: Quick add từ Dictionary Popup ──
+async quickAddFromDictionary(userId: string, dto: QuickAddWordDto) {
+  // Check duplicate
+  const { exists } = await this.checkWordExists(userId, dto.word);
+  if (exists) {
+    throw new ConflictException('Từ này đã có trong Word Bank');
+  }
+
+  // Map gender → nomenData JSON
+  const nomenData = dto.gender
+    ? { article: dto.gender, gender: dto.gender, plural: dto.plural || '' }
+    : undefined;
+
+  return this.prisma.personalWord.create({
+    data: {
+      userId,
+      word: dto.word.trim(),
+      wordType: dto.wordType || 'andere',
+      nomenData: nomenData || undefined,
+      translationVi: dto.translationVi?.trim() || '',
+      translationEn: dto.translationEn?.trim() || '',
+      level: dto.level || 'A1',
+      examples: dto.example ? [dto.example] : [],
+      notes: 'Thêm từ Dictionary Popup',
+    },
+  });
+}
+
 
 }

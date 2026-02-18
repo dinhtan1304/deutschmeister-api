@@ -134,4 +134,22 @@ export class WordsService {
       byLevel: byLevel.map(l => ({ level: l.level, count: l._count.id })),
     };
   }
+
+  async getLevelIndex(): Promise<Record<string, string>> {
+    const words = await this.prisma.word.findMany({
+      select: {
+        word: true,
+        level: true,
+      },
+    });
+
+    const index: Record<string, string> = {};
+    for (const w of words) {
+      if (w.word && w.level) {
+        index[w.word.toLowerCase()] = w.level;
+      }
+    }
+
+    return index;
+  }
 }

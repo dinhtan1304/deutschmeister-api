@@ -15,6 +15,7 @@ import { PersonalWordsModule } from './modules/personal-words';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { WritingModule } from './modules/writing/writing.module';
 import { GrammarModule } from './modules/grammar/grammar.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { GrammarModule } from './modules/grammar/grammar.module';
     DashboardModule,
     WritingModule,
     GrammarModule,
+    AiModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

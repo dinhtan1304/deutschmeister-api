@@ -6,6 +6,6 @@ import { GeminiService } from './gemini.service';
 @Module({
   controllers: [WritingController],
   providers: [WritingService, GeminiService],
-  exports: [WritingService],
+  exports: [WritingService, GeminiService],
 })
 export class WritingModule {}
