@@ -1,33 +1,33 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
-  id              String    @id @default(cuid())
-  email           String    @unique
-  passwordHash    String    @map("password_hash")
+  id              String            @id @default(cuid())
+  email           String            @unique
+  passwordHash    String            @map("password_hash")
   name            String?
   avatar          String?
-  role            String    @default("user") // "user" | "admin"
-  isActive        Boolean   @default(true) @map("is_active")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-
-  settings        Settings?
+  isActive        Boolean           @default(true) @map("is_active")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  role            String            @default("user")
   favorites       Favorite[]
-  history         History[]
   gameSessions    GameSession[]
+  grammarProgress GrammarProgress[]
+  history         History[]
+  personalWords   PersonalWord[]
   progress        Progress[]
   refreshTokens   RefreshToken[]
-  personalWords   PersonalWord[]
+  settings        Settings?
   topicProgress   TopicProgress[]
   writingSessions WritingSession[]
-  grammarProgress GrammarProgress[]
+
   @@map("users")
 }
 
@@ -35,9 +35,9 @@ model RefreshToken {
   id        String   @id @default(cuid())
   token     String   @unique
   userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("refresh_tokens")
@@ -46,7 +46,6 @@ model RefreshToken {
 model Settings {
   id               String   @id @default(cuid())
   userId           String   @unique @map("user_id")
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   theme            String   @default("system")
   soundEnabled     Boolean  @default(true) @map("sound_enabled")
   vibrationEnabled Boolean  @default(true) @map("vibration_enabled")
@@ -55,32 +54,32 @@ model Settings {
   showVietnamese   Boolean  @default(true) @map("show_vietnamese")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("settings")
 }
 
 model Word {
-  id            String   @id @default(cuid())
+  id            String       @id @default(cuid())
   word          String
   article       String
   gender        String
   plural        String?
   pronunciation String?
-  imageUrl      String?  @map("image_url")
-  translationEn String   @map("translation_en")
-  translationVi String?  @map("translation_vi")
+  imageUrl      String?      @map("image_url")
+  translationEn String       @map("translation_en")
+  translationVi String?      @map("translation_vi")
   category      String
   level         String
-  frequency     Int      @default(0)
+  frequency     Int          @default(0)
   examples      String[]
   tips          String[]
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
   favorites     Favorite[]
+  gameAnswers   GameAnswer[]
   history       History[]
   progress      Progress[]
-  gameAnswers   GameAnswer[]
   topicWords    TopicWord[]
 
   @@index([gender])
@@ -93,10 +92,10 @@ model Word {
 model Favorite {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   wordId    String   @map("word_id")
-  word      Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word      Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
 
   @@unique([userId, wordId])
   @@index([userId])
@@ -104,12 +103,12 @@ model Favorite {
 }
 
 model History {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  wordId    String   @map("word_id")
-  word      Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
-  viewedAt  DateTime @default(now()) @map("viewed_at")
+  id       String   @id @default(cuid())
+  userId   String   @map("user_id")
+  wordId   String   @map("word_id")
+  viewedAt DateTime @default(now()) @map("viewed_at")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word     Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
 
   @@index([userId, viewedAt])
   @@map("history")
@@ -118,7 +117,6 @@ model History {
 model GameSession {
   id             String       @id @default(cuid())
   userId         String       @map("user_id")
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   gameType       String       @map("game_type")
   difficulty     String
   category       String?
@@ -131,6 +129,7 @@ model GameSession {
   endedAt        DateTime?    @map("ended_at")
   duration       Int?
   answers        GameAnswer[]
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, gameType])
   @@index([userId, startedAt])
@@ -140,14 +139,14 @@ model GameSession {
 model GameAnswer {
   id             String      @id @default(cuid())
   sessionId      String      @map("session_id")
-  session        GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   wordId         String      @map("word_id")
-  word           Word        @relation(fields: [wordId], references: [id])
   selectedAnswer String      @map("selected_answer")
   correctAnswer  String      @map("correct_answer")
   isCorrect      Boolean     @map("is_correct")
   responseTime   Int         @map("response_time")
   createdAt      DateTime    @default(now()) @map("created_at")
+  session        GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  word           Word        @relation(fields: [wordId], references: [id])
 
   @@index([sessionId])
   @@map("game_answers")
@@ -156,9 +155,7 @@ model GameAnswer {
 model Progress {
   id           String    @id @default(cuid())
   userId       String    @map("user_id")
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   wordId       String    @map("word_id")
-  word         Word      @relation(fields: [wordId], references: [id], onDelete: Cascade)
   easeFactor   Float     @default(2.5) @map("ease_factor")
   interval     Int       @default(0)
   repetitions  Int       @default(0)
@@ -168,183 +165,140 @@ model Progress {
   correctCount Int       @default(0) @map("correct_count")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  word         Word      @relation(fields: [wordId], references: [id], onDelete: Cascade)
 
   @@unique([userId, wordId])
   @@index([userId, nextReviewAt])
   @@map("progress")
 }
 
-// ============== PERSONAL WORD BANK ==============
 model PersonalWord {
-  id              String   @id @default(cuid())
-  userId          String   @map("user_id")
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
   word            String
-  wordType        String   @map("word_type") // nomen, verb, adjektiv, adverb, praposition, konjunktion, pronomen, partikel, andere
-
-  // Type-specific data (JSON)
-  nomenData       Json?    @map("nomen_data")       // { article, gender, plural }
-  verbData        Json?    @map("verb_data")         // { partizipII, hilfsverb, trennbar, prateritum, konjugation }
-  adjektivData    Json?    @map("adjektiv_data")     // { komparativ, superlativ }
-  prapositionData Json?    @map("praposition_data")  // { kasus[] }
-
-  translationEn   String   @map("translation_en")
-  translationVi   String   @map("translation_vi")
-
-  examples        String[] @default([])
-  level           String   @default("A1")
+  wordType        String    @map("word_type")
+  nomenData       Json?     @map("nomen_data")
+  verbData        Json?     @map("verb_data")
+  adjektivData    Json?     @map("adjektiv_data")
+  prapositionData Json?     @map("praposition_data")
+  translationEn   String    @map("translation_en")
+  translationVi   String    @map("translation_vi")
+  examples        String[]  @default([])
+  level           String    @default("A1")
   category        String?
-  tags            String[] @default([])
+  tags            String[]  @default([])
   notes           String?
   pronunciation   String?
-
-  isFavorite      Boolean  @default(false) @map("is_favorite")
-  
-  // ============== SRS Fields ==============
-  easeFactor      Float    @default(2.5) @map("ease_factor")    // SM-2 ease factor (min 1.3)
-  interval        Int      @default(0)                          // Days until next review
-  repetitions     Int      @default(0)                          // Consecutive correct reviews
-  nextReviewAt    DateTime @default(now()) @map("next_review_at")
+  isFavorite      Boolean   @default(false) @map("is_favorite")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  correctCount    Int       @default(0) @map("correct_count")
+  easeFactor      Float     @default(2.5) @map("ease_factor")
+  interval        Int       @default(0)
   lastReviewAt    DateTime? @map("last_review_at")
-  totalReviews    Int      @default(0) @map("total_reviews")
-  correctCount    Int      @default(0) @map("correct_count")
-  // =========================================
+  nextReviewAt    DateTime  @default(now()) @map("next_review_at")
+  repetitions     Int       @default(0)
+  totalReviews    Int       @default(0) @map("total_reviews")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-
-  @@unique([userId, word, wordType]) // Prevent duplicate word+type per user
+  @@unique([userId, word, wordType])
   @@index([userId])
   @@index([userId, wordType])
   @@index([userId, level])
   @@index([userId, isFavorite])
-  @@index([userId, nextReviewAt])  // Index for SRS queries
+  @@index([userId, nextReviewAt])
   @@map("personal_words")
 }
-// ============================================
-// VOCABULARY TOPICS - Thêm vào schema.prisma
-// ============================================
 
-// Chủ đề từ vựng (12 chủ đề A1)
 model Topic {
-  id            String   @id @default(cuid())
-  slug          String   @unique // "wohnen", "essen-trinken"
-  
-  // Names
-  nameDe        String   @map("name_de")      // "Wohnen"
-  nameEn        String   @map("name_en")      // "Housing"
-  nameVi        String   @map("name_vi")      // "Nhà ở"
-  
-  // Descriptions
-  descriptionDe String?  @map("description_de")
-  descriptionEn String?  @map("description_en")
-  descriptionVi String?  @map("description_vi")
-  
-  // Metadata
-  icon          String?  // Emoji: 🏠
-  color         String?  // Hex: #4CAF50
-  imageUrl      String?  @map("image_url")
-  level         String   @default("A1") // CEFR level
-  order         Int      @default(0) // Thứ tự hiển thị
-  isActive      Boolean  @default(true) @map("is_active")
-  
-  // Stats (cached, updated by trigger/cron)
-  wordCount     Int      @default(0) @map("word_count")
-  
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
-  // Relations
-  topicWords    TopicWord[]
+  id            String          @id @default(cuid())
+  slug          String          @unique
+  nameDe        String          @map("name_de")
+  nameEn        String          @map("name_en")
+  nameVi        String          @map("name_vi")
+  descriptionDe String?         @map("description_de")
+  descriptionEn String?         @map("description_en")
+  descriptionVi String?         @map("description_vi")
+  icon          String?
+  color         String?
+  imageUrl      String?         @map("image_url")
+  level         String          @default("A1")
+  order         Int             @default(0)
+  isActive      Boolean         @default(true) @map("is_active")
+  wordCount     Int             @default(0) @map("word_count")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  type          String          @default("general")
   userProgress  TopicProgress[]
-  
+  topicWords    TopicWord[]
+
   @@index([level])
   @@index([order])
   @@map("topics")
 }
 
-// Junction table: Topic ↔ Word (many-to-many)
 model TopicWord {
   id        String   @id @default(cuid())
   topicId   String   @map("topic_id")
-  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
   wordId    String   @map("word_id")
-  word      Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
-  
-  order     Int      @default(0) // Thứ tự trong topic
-  isCore    Boolean  @default(false) @map("is_core") // Từ cốt lõi của topic
-  
+  order     Int      @default(0)
+  isCore    Boolean  @default(false) @map("is_core")
   createdAt DateTime @default(now()) @map("created_at")
-  
+  topic     Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  word      Word     @relation(fields: [wordId], references: [id], onDelete: Cascade)
+
   @@unique([topicId, wordId])
   @@index([topicId])
   @@index([wordId])
   @@map("topic_words")
 }
 
-// User progress per topic
 model TopicProgress {
-  id              String    @id @default(cuid())
-  userId          String    @map("user_id")
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  topicId         String    @map("topic_id")
-  topic           Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  
-  wordsLearned    Int       @default(0) @map("words_learned")
-  wordsTotal      Int       @default(0) @map("words_total")
-  masteryPercent  Float     @default(0) @map("mastery_percent") // 0-100
-  
-  lastStudiedAt   DateTime? @map("last_studied_at")
-  completedAt     DateTime? @map("completed_at")
-  
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  topicId        String    @map("topic_id")
+  wordsLearned   Int       @default(0) @map("words_learned")
+  wordsTotal     Int       @default(0) @map("words_total")
+  masteryPercent Float     @default(0) @map("mastery_percent")
+  lastStudiedAt  DateTime? @map("last_studied_at")
+  completedAt    DateTime? @map("completed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  topic          Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, topicId])
   @@index([userId])
   @@map("topic_progress")
 }
 
 model WritingSession {
-  id            String        @id @default(cuid())
-  userId        String        @map("user_id")
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // ── Cấu hình đề bài ──
-  topic         String                  // Chủ đề: "Wohnung", "Einkaufen", hoặc custom
-  cefrLevel     String        @map("cefr_level")    // A1, A2, B1, B2
-  writingType   String        @map("writing_type")  // email, brief, beschreibung...
-  wordCountMin  Int           @map("word_count_min")
-  wordCountMax  Int           @map("word_count_max")
-
-  // ── Đề bài do AI tạo ──
-  prompt        String        @db.Text              // Đề bài tiếng Đức
-  vocabHints    Json?         @map("vocab_hints")   // ["die Wohnung (căn hộ)", ...]
-  grammarHints  Json?         @map("grammar_hints") // ["sein + Adjektiv (là + tính từ)", ...]
-
-  // ── Bài viết của user ──
-  userText      String?       @map("user_text") @db.Text
-  wordCount     Int?          @map("word_count")
-  submittedAt   DateTime?     @map("submitted_at")
-
-  // ── Kết quả chấm bài ──
-  overallScore  Float?        @map("overall_score")   // 0-100
-  correctedText String?       @map("corrected_text") @db.Text
-  feedbackDe    String?       @map("feedback_de") @db.Text     // Nhận xét tiếng Đức
-  feedbackVi    String?       @map("feedback_vi") @db.Text     // Nhận xét tiếng Việt
-  strengths     Json?                                           // ["Guter Wortschatz", ...]
-  improvements  Json?                                           // ["Artikel üben", ...]
-  gradedAt      DateTime?     @map("graded_at")
-
-  // ── Trạng thái ──
-  status        String        @default("DRAFT")     // DRAFT, SUBMITTED, GRADING, GRADED, ERROR
-
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-
-  // Relations
+  id            String         @id @default(cuid())
+  userId        String         @map("user_id")
+  topic         String
+  cefrLevel     String         @map("cefr_level")
+  writingType   String         @map("writing_type")
+  wordCountMin  Int            @map("word_count_min")
+  wordCountMax  Int            @map("word_count_max")
+  prompt        String
+  vocabHints    Json?          @map("vocab_hints")
+  grammarHints  Json?          @map("grammar_hints")
+  userText      String?        @map("user_text")
+  wordCount     Int?           @map("word_count")
+  submittedAt   DateTime?      @map("submitted_at")
+  overallScore  Float?         @map("overall_score")
+  correctedText String?        @map("corrected_text")
+  feedbackDe    String?        @map("feedback_de")
+  feedbackVi    String?        @map("feedback_vi")
+  strengths     Json?
+  improvements  Json?
+  gradedAt      DateTime?      @map("graded_at")
+  status        String         @default("DRAFT")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
   errors        WritingError[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([userId, createdAt(sort: Desc)])
@@ -354,104 +308,78 @@ model WritingSession {
 model WritingError {
   id               String         @id @default(cuid())
   writingSessionId String         @map("writing_session_id")
+  errorType        String         @map("error_type")
+  severity         String
+  originalText     String         @map("original_text")
+  correctedText    String         @map("corrected_text")
+  explanationDe    String         @map("explanation_de")
+  explanationVi    String         @map("explanation_vi")
+  position         Int?
+  createdAt        DateTime       @default(now()) @map("created_at")
   session          WritingSession @relation(fields: [writingSessionId], references: [id], onDelete: Cascade)
-
-  errorType      String   @map("error_type")       // article, grammar, word_order, conjugation, case, spelling, vocabulary
-  severity       String                             // error, warning, suggestion
-  originalText   String   @map("original_text")     // Đoạn sai
-  correctedText  String   @map("corrected_text")    // Đoạn đúng
-  explanationDe  String   @map("explanation_de") @db.Text  // Giải thích tiếng Đức
-  explanationVi  String   @map("explanation_vi") @db.Text  // Giải thích tiếng Việt
-  position       Int?                               // Vị trí trong bài (character index)
-
-  createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([writingSessionId])
   @@index([errorType])
   @@map("writing_errors")
 }
 
-// ============== GRAMMAR MODULE ==============
 model GrammarLesson {
-  id              String   @id @default(cuid())
-  slug            String   @unique          // "a1-l01-alphabet"
-  level           String                    // A1, A2, B1
-  lessonNumber    Int      @map("lesson_number")
-  
-  // Titles (bilingual)
-  titleDe         String   @map("title_de")
-  titleEn         String   @map("title_en")
-  titleVi         String   @map("title_vi")
-  
-  // Content (JSON for flexibility)
-  objectives      Json                      // { de:[], en:[], vi:[] }
-  theoryContent   Json     @map("theory_content")  // Structured content
-  
-  // Metadata
-  estimatedMinutes Int     @default(25) @map("estimated_minutes")
-  prerequisiteIds String[] @default([]) @map("prerequisite_ids")
-  order           Int      @default(0)
-  isActive        Boolean  @default(true) @map("is_active")
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  
-  exercises       GrammarExercise[]
-  progress        GrammarProgress[]
-  
+  id               String            @id @default(cuid())
+  slug             String            @unique
+  level            String
+  lessonNumber     Int               @map("lesson_number")
+  titleDe          String            @map("title_de")
+  titleEn          String            @map("title_en")
+  titleVi          String            @map("title_vi")
+  objectives       Json
+  theoryContent    Json              @map("theory_content")
+  estimatedMinutes Int               @default(25) @map("estimated_minutes")
+  prerequisiteIds  String[]          @default([]) @map("prerequisite_ids")
+  order            Int               @default(0)
+  isActive         Boolean           @default(true) @map("is_active")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  exercises        GrammarExercise[]
+  progress         GrammarProgress[]
+
   @@index([level, order])
   @@map("grammar_lessons")
 }
 
 model GrammarExercise {
-  id              String   @id @default(cuid())
-  lessonId        String   @map("lesson_id")
-  lesson          GrammarLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  
-  exerciseType    String   @map("exercise_type")  // mcq, fill_blank, reorder, translate, error_correct
-  order           Int      @default(0)
-  
-  // Content (bilingual)
-  questionDe      String?  @map("question_de")
-  questionEn      String?  @map("question_en")
-  questionVi      String?  @map("question_vi")
-  
-  // Answer data (JSON - varies by type)
-  answerData      Json     @map("answer_data")
-  // MCQ: { options: [], correctIndex: 0 }
-  // Fill: { blanks: [{ answer: "", alternatives: [] }] }
-  // Reorder: { correctOrder: [] }
-  // Translate: { acceptedAnswers: [] }
-  // Error: { originalText: "", correctedText: "", errorPosition: 0 }
-  
-  explanation     Json?                     // { de:, en:, vi: }
-  points          Int      @default(1)
-  
-  createdAt       DateTime @default(now()) @map("created_at")
-  
+  id           String        @id @default(cuid())
+  lessonId     String        @map("lesson_id")
+  exerciseType String        @map("exercise_type")
+  order        Int           @default(0)
+  questionDe   String?       @map("question_de")
+  questionEn   String?       @map("question_en")
+  questionVi   String?       @map("question_vi")
+  answerData   Json          @map("answer_data")
+  explanation  Json?
+  points       Int           @default(1)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  lesson       GrammarLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
   @@index([lessonId, order])
   @@map("grammar_exercises")
 }
 
 model GrammarProgress {
-  id              String    @id @default(cuid())
-  userId          String    @map("user_id")
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lessonId        String    @map("lesson_id")
-  lesson          GrammarLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  
-  status          String    @default("not_started")  // not_started, in_progress, completed
-  score           Float?                              // 0-100
-  correctCount    Int       @default(0) @map("correct_count")
-  totalAttempts   Int       @default(0) @map("total_attempts")
-  
-  startedAt       DateTime? @map("started_at")
-  completedAt     DateTime? @map("completed_at")
-  lastAttemptAt   DateTime? @map("last_attempt_at")
-  
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  
+  id            String        @id @default(cuid())
+  userId        String        @map("user_id")
+  lessonId      String        @map("lesson_id")
+  status        String        @default("not_started")
+  score         Float?
+  correctCount  Int           @default(0) @map("correct_count")
+  totalAttempts Int           @default(0) @map("total_attempts")
+  startedAt     DateTime?     @map("started_at")
+  completedAt   DateTime?     @map("completed_at")
+  lastAttemptAt DateTime?     @map("last_attempt_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  lesson        GrammarLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, lessonId])
   @@index([userId])
   @@index([userId, status])

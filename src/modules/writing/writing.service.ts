@@ -143,7 +143,7 @@ export class WritingService {
       });
 
       // Lưu kết quả + errors trong transaction
-      const result = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx : any) => {
         // Xóa errors cũ nếu có (trường hợp nộp lại)
         await tx.writingError.deleteMany({
           where: { writingSessionId: sessionId },

@@ -1,8 +1,17 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { PrismaNeon } from '@prisma/adapter-neon';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  constructor() {
+    const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! });
+    super({ adapter } as any);
+  }
+
   async onModuleInit() {
     await this.$connect();
   }
