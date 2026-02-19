@@ -668,26 +668,39 @@ export class DashboardService {
   private calculateStreaksFromData(
     data: ActivityDayDto[],
   ): { currentStreak: number; longestStreak: number } {
-    let currentStreak = 0;
     let longestStreak = 0;
     let tempStreak = 0;
 
-    for (let i = data.length - 1; i >= 0; i--) {
+    // ── Pass 1: tìm longestStreak (duyệt từ cũ → mới) ──
+    for (let i = 0; i < data.length; i++) {
       if (data[i].count > 0) {
         tempStreak++;
-        if (i === data.length - 1 || i === data.length - 2) {
-          currentStreak = tempStreak;
-        }
+        if (tempStreak > longestStreak) longestStreak = tempStreak;
       } else {
-        if (tempStreak > longestStreak) {
-          longestStreak = tempStreak;
-        }
         tempStreak = 0;
       }
     }
 
-    if (tempStreak > longestStreak) {
-      longestStreak = tempStreak;
+    // ── Pass 2: tính currentStreak (duyệt từ mới → cũ) ──
+    // data[data.length - 1] = hôm nay
+    // data[data.length - 2] = hôm qua
+    // Cho phép hôm nay chưa active (user có thể chưa học hôm nay)
+    // → bắt đầu từ hôm nay, nếu không active thì thử hôm qua
+    let currentStreak = 0;
+    let startIdx = data.length - 1;
+
+    // Nếu hôm nay không active, thử bắt đầu từ hôm qua
+    if (startIdx >= 0 && data[startIdx].count === 0) {
+      startIdx--;
+    }
+
+    // Đếm ngược liên tiếp từ startIdx
+    for (let i = startIdx; i >= 0; i--) {
+      if (data[i].count > 0) {
+        currentStreak++;
+      } else {
+        break;
+      }
     }
 
     return { currentStreak, longestStreak };

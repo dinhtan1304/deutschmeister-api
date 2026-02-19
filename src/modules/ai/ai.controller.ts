@@ -1,10 +1,3 @@
-// ================================================================
-// TẠO FILE MỚI: src/modules/ai/ai.controller.ts
-//
-// Hoặc thêm endpoint vào writing.controller.ts nếu muốn gom chung.
-// Nếu tạo module riêng: cần ai.module.ts import GeminiService.
-// ================================================================
-
 import {
   Controller,
   Post,

@@ -671,34 +671,37 @@ export class PersonalWordsService {
    * Get forecast for next N days
    */
   private async getForecast(userId: string, days: number) {
-    const forecast: { date: string; count: number }[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < days; i++) {
+    // Build date ranges for all days upfront
+    const dateRanges = Array.from({ length: days }, (_, i) => {
       const date = new Date(today);
       date.setDate(date.getDate() + i);
-      
       const nextDate = new Date(date);
       nextDate.setDate(nextDate.getDate() + 1);
+      return { date, nextDate, label: date.toISOString().split('T')[0] };
+    });
 
-      const count = await this.prisma.personalWord.count({
-        where: {
-          userId,
-          nextReviewAt: {
-            gte: date,
-            lt: nextDate,
+    // Run all count queries in parallel instead of sequentially
+    const counts = await Promise.all(
+      dateRanges.map(({ date, nextDate }) =>
+        this.prisma.personalWord.count({
+          where: {
+            userId,
+            nextReviewAt: {
+              gte: date,
+              lt: nextDate,
+            },
           },
-        },
-      });
+        }),
+      ),
+    );
 
-      forecast.push({
-        date: date.toISOString().split('T')[0],
-        count,
-      });
-    }
-
-    return forecast;
+    return dateRanges.map(({ label }, i) => ({
+      date: label,
+      count: counts[i],
+    }));
   }
 
   /**
