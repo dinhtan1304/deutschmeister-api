@@ -277,12 +277,21 @@ export class DashboardService {
   async getWeeklyProgress(userId: string): Promise<WeeklyProgressDto[]> {
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+    // Build boundaries in VN local time (UTC+7) so that activities between
+    // 00:00–07:00 VN are not silently excluded by a UTC-midnight cutoff.
+    //
+    // VN end-of-today  = UTC 23:59:59 today + 7h shift → UTC today+1 at 06:59:59
+    // VN start-of-(today-6) = UTC (today-6) at 17:00:00 (= midnight UTC+7 minus 7h)
     const today = new Date();
-    today.setHours(23, 59, 59, 999);
+    today.setTime(today.getTime() + this.TZ_OFFSET_MS); // shift to VN
+    today.setUTCHours(23, 59, 59, 999);                 // floor to VN end-of-day
+    today.setTime(today.getTime() - this.TZ_OFFSET_MS); // shift back to UTC
 
     const sevenDaysAgo = new Date();
+    sevenDaysAgo.setTime(sevenDaysAgo.getTime() + this.TZ_OFFSET_MS); // shift to VN
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-    sevenDaysAgo.setHours(0, 0, 0, 0);
+    sevenDaysAgo.setUTCHours(0, 0, 0, 0);                              // floor to VN midnight
+    sevenDaysAgo.setTime(sevenDaysAgo.getTime() - this.TZ_OFFSET_MS); // shift back to UTC
 
     const [gameSessions, progressData, topicStudyData, grammarData] = await Promise.all([
       this.prisma.gameSession.findMany({
@@ -397,8 +406,11 @@ export class DashboardService {
       const dateStr = this.toLocalDateStr(date);
       const entry = dateMap.get(dateStr);
 
+      // Use VN-adjusted date for weekday name — date.getDay() is UTC-based and
+      // returns the wrong weekday for VN users active between 00:00–07:00 VN time.
+      const vnDate = new Date(date.getTime() + this.TZ_OFFSET_MS);
       days.push({
-        day: dayNames[date.getDay()],
+        day: dayNames[vnDate.getUTCDay()],
         date: dateStr,
         wordsLearned: entry?.wordsLearned ?? 0,
         gamesPlayed: entry?.gamesPlayed ?? 0,
@@ -579,24 +591,21 @@ export class DashboardService {
    * Calculate streak - includes ALL activity sources
    */
   private async calculateStreak(userId: string): Promise<number> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const sixtyDaysAgo = new Date(today);
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    const sixtyDaysAgoUtc = new Date();
+    sixtyDaysAgoUtc.setDate(sixtyDaysAgoUtc.getDate() - 60);
 
     const [gameSessions, progressReviews, topicStudy, grammarStudy] = await Promise.all([
       this.prisma.gameSession.findMany({
         where: {
           userId,
-          startedAt: { gte: sixtyDaysAgo },
+          startedAt: { gte: sixtyDaysAgoUtc },
         },
         select: { startedAt: true },
       }),
       this.prisma.progress.findMany({
         where: {
           userId,
-          lastReviewAt: { gte: sixtyDaysAgo },
+          lastReviewAt: { gte: sixtyDaysAgoUtc },
         },
         select: { lastReviewAt: true },
       }),
@@ -604,8 +613,8 @@ export class DashboardService {
         where: {
           userId,
           OR: [
-            { lastStudiedAt: { gte: sixtyDaysAgo } },
-            { updatedAt: { gte: sixtyDaysAgo } },
+            { lastStudiedAt: { gte: sixtyDaysAgoUtc } },
+            { updatedAt: { gte: sixtyDaysAgoUtc } },
           ],
         },
         select: { lastStudiedAt: true, updatedAt: true },
@@ -614,7 +623,7 @@ export class DashboardService {
       this.prisma.grammarProgress.findMany({
         where: {
           userId,
-          lastAttemptAt: { gte: sixtyDaysAgo },
+          lastAttemptAt: { gte: sixtyDaysAgoUtc },
         },
         select: { lastAttemptAt: true },
       }),
@@ -649,39 +658,16 @@ export class DashboardService {
       }
     });
 
-    // Calculate streak from today backwards.
-    // Grace rule: if today is not yet active, start counting from yesterday
-    // (user may not have studied yet today but streak is still valid)
-    let streak = 0;
-    const todayStr = this.toLocalDateStr(today);
-
-    // Determine start: today if active, otherwise yesterday
-    let startDate = new Date(today);
-    if (!activeDates.has(todayStr)) {
-      startDate.setDate(startDate.getDate() - 1);
-    }
-
-    // Count consecutive active days going backwards from startDate
-    for (let i = 0; i < 60; i++) {
-      const dateStr = this.toLocalDateStr(startDate);
-      if (activeDates.has(dateStr)) {
-        streak++;
-        startDate.setDate(startDate.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-
-    return streak;
+    // Delegate to shared helper — single source of truth for grace-period logic
+    return this.computeCurrentStreak(activeDates);
   }
 
   private calculateStreaksFromData(
     data: ActivityDayDto[],
   ): { currentStreak: number; longestStreak: number } {
+    // ── longestStreak: full forward scan ──
     let longestStreak = 0;
     let tempStreak = 0;
-
-    // ── Pass 1: tìm longestStreak (duyệt từ cũ → mới) ──
     for (let i = 0; i < data.length; i++) {
       if (data[i].count > 0) {
         tempStreak++;
@@ -691,38 +677,84 @@ export class DashboardService {
       }
     }
 
-    // ── Pass 2: tính currentStreak (duyệt từ mới → cũ) ──
-    // data[data.length - 1] = hôm nay
-    // data[data.length - 2] = hôm qua
-    // Cho phép hôm nay chưa active (user có thể chưa học hôm nay)
-    // → bắt đầu từ hôm nay, nếu không active thì thử hôm qua
-    let currentStreak = 0;
-    let startIdx = data.length - 1;
-
-    // Nếu hôm nay không active, thử bắt đầu từ hôm qua
-    if (startIdx >= 0 && data[startIdx].count === 0) {
-      startIdx--;
-    }
-
-    // Đếm ngược liên tiếp từ startIdx
-    for (let i = startIdx; i >= 0; i--) {
-      if (data[i].count > 0) {
-        currentStreak++;
-      } else {
-        break;
-      }
-    }
+    // ── currentStreak: delegate to shared helper so grace-period logic
+    //    stays in one place and never diverges from calculateStreak(). ──
+    const activeDates = new Set(
+      data.filter(d => d.count > 0).map(d => d.date),
+    );
+    const currentStreak = this.computeCurrentStreak(activeDates);
 
     return { currentStreak, longestStreak };
   }
 
   /**
-   * Convert Date to YYYY-MM-DD string in local timezone.
+   * Core current-streak calculation from a Set of active date strings.
+   *
+   * Single source of truth for the grace-period rule: if today is not yet
+   * active (user hasn't studied yet), start counting from yesterday so the
+   * streak is not broken prematurely.
+   *
+   * Called by both:
+   *   - calculateStreak()         → used in getStats() (direct DB query)
+   *   - calculateStreaksFromData() → used in getActivityHeatmap() (from heatmap data)
+   *
+   * Keeping the logic here guarantees both callers always agree on the streak
+   * value shown in the stats card and in the heatmap footer.
+   */
+  private computeCurrentStreak(activeDates: Set<string>): number {
+    // Determine VN "today" using the same TZ offset used everywhere else
+    const nowVN = new Date(Date.now() + this.TZ_OFFSET_MS);
+    nowVN.setUTCHours(0, 0, 0, 0);
+    const today = new Date(nowVN.getTime() - this.TZ_OFFSET_MS);
+    const todayStr = this.toLocalDateStr(today);
+
+    // Grace period: if user hasn't studied today, start counting from yesterday
+    let startDate = new Date(today);
+    if (!activeDates.has(todayStr)) {
+      startDate.setDate(startDate.getDate() - 1);
+    }
+
+    let streak = 0;
+    for (let i = 0; i < 60; i++) {
+      const dateStr = this.toLocalDateStr(startDate);
+      if (activeDates.has(dateStr)) {
+        streak++;
+        startDate.setDate(startDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  /**
+   * Convert Date to YYYY-MM-DD string in Vietnam timezone (UTC+7).
+   *
+   * WHY: Node.js Date methods like getFullYear() / getDate() use the server's
+   * local timezone, which is typically UTC in Docker/cloud deployments.
+   * Users in Vietnam (UTC+7) who study between 00:00–07:00 VN time would have
+   * their activity recorded on the *previous* UTC day, causing:
+   *   - Streak counter reset incorrectly
+   *   - Heatmap activity shown on wrong day
+   *   - Weekly chart bars in wrong column
+   *
+   * FIX: Shift the timestamp by +7 hours, then read UTC fields — this gives
+   * the correct VN local date without relying on server timezone settings.
+   *
+   * If the app ever expands beyond Vietnam, replace TZ_OFFSET_MS with a
+   * per-user timezone offset fetched from their Settings row.
    */
   private toLocalDateStr(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
+    const vn = new Date(date.getTime() + this.TZ_OFFSET_MS);
+    const y = vn.getUTCFullYear();
+    const m = String(vn.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(vn.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
+
+  /**
+   * Vietnam timezone offset in milliseconds (UTC+7).
+   * Used by toLocalDateStr() for all date-string conversions.
+   */
+  private readonly TZ_OFFSET_MS = 7 * 60 * 60 * 1000;
 }

@@ -122,6 +122,15 @@ export class WritingService {
 
     const wordCount = this.countWords(dto.userText);
 
+    // Reject submissions that are too short to grade meaningfully.
+    // Without this, a 1-word answer for an 80-word task wastes Gemini tokens
+    // and returns a useless grade.
+    if (wordCount < session.wordCountMin) {
+      throw new BadRequestException(
+        `Bài viết quá ngắn. Cần ít nhất ${session.wordCountMin} từ, bạn mới viết ${wordCount} từ.`,
+      );
+    }
+
     // Cập nhật trạng thái → GRADING
     await this.prisma.writingSession.update({
       where: { id: sessionId },

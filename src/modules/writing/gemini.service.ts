@@ -330,9 +330,19 @@ Bitte korrigiere und bewerte diesen Text ausführlich.`;
   }
 
   async analyzeGrammar(sentence: string, cefrLevel?: string): Promise<GrammarAnalysisResult> {
-  const level = cefrLevel || 'A1';
+    const level = cefrLevel || 'A1';
 
-  const systemInstruction = `Du bist ein erfahrener Deutschlehrer für vietnamesische Lerner.
+    // Guard: reject empty or excessively long input before hitting the API
+    if (!sentence || !sentence.trim()) {
+      throw new InternalServerErrorException('Câu không được để trống.');
+    }
+    if (sentence.length > 500) {
+      throw new InternalServerErrorException(
+        'Câu quá dài. Vui lòng nhập câu ngắn hơn 500 ký tự.',
+      );
+    }
+
+    const systemInstruction = `Du bist ein erfahrener Deutschlehrer für vietnamesische Lerner.
 
 AUFGABE: Analysiere den folgenden deutschen Satz grammatisch.
 
@@ -345,67 +355,86 @@ REGELN:
 - Gib praktische Tipps zum Merken auf Vietnamesisch
 - Wenn der Satz Fehler hat, korrigiere ihn in correctedSentence`;
 
-  const userPrompt = `Analysiere diesen Satz: "${sentence}"`;
+    const userPrompt = `Analysiere diesen Satz: "${sentence.trim()}"`;
 
-  const responseSchema = {
-    type: 'OBJECT' as const,
-    properties: {
-      sentence: { type: 'STRING' as const },
-      correctedSentence: { type: 'STRING' as const },
-      hasErrors: { type: 'BOOLEAN' as const },
-      tense: { type: 'STRING' as const },
-      tenseVi: { type: 'STRING' as const },
-      sentenceType: { type: 'STRING' as const },
-      sentenceTypeVi: { type: 'STRING' as const },
-      components: {
-        type: 'ARRAY' as const,
-        items: {
-          type: 'OBJECT' as const,
-          properties: {
-            text: { type: 'STRING' as const },
-            role: { type: 'STRING' as const },
-            roleVi: { type: 'STRING' as const },
-            case: { type: 'STRING' as const },
-            caseVi: { type: 'STRING' as const },
-            noteVi: { type: 'STRING' as const },
+    const responseSchema = {
+      type: 'OBJECT' as const,
+      properties: {
+        sentence: { type: 'STRING' as const },
+        correctedSentence: { type: 'STRING' as const },
+        hasErrors: { type: 'BOOLEAN' as const },
+        tense: { type: 'STRING' as const },
+        tenseVi: { type: 'STRING' as const },
+        sentenceType: { type: 'STRING' as const },
+        sentenceTypeVi: { type: 'STRING' as const },
+        components: {
+          type: 'ARRAY' as const,
+          items: {
+            type: 'OBJECT' as const,
+            properties: {
+              text: { type: 'STRING' as const },
+              role: { type: 'STRING' as const },
+              roleVi: { type: 'STRING' as const },
+              case: { type: 'STRING' as const },
+              caseVi: { type: 'STRING' as const },
+              noteVi: { type: 'STRING' as const },
+            },
+            required: ['text', 'role', 'roleVi', 'noteVi'],
           },
-          required: ['text', 'role', 'roleVi', 'noteVi'],
         },
-      },
-      explanationVi: { type: 'STRING' as const },
-      grammarRules: {
-        type: 'ARRAY' as const,
-        items: {
-          type: 'OBJECT' as const,
-          properties: {
-            rule: { type: 'STRING' as const },
-            ruleVi: { type: 'STRING' as const },
+        explanationVi: { type: 'STRING' as const },
+        grammarRules: {
+          type: 'ARRAY' as const,
+          items: {
+            type: 'OBJECT' as const,
+            properties: {
+              rule: { type: 'STRING' as const },
+              ruleVi: { type: 'STRING' as const },
+            },
+            required: ['rule', 'ruleVi'],
           },
-          required: ['rule', 'ruleVi'],
         },
+        tipVi: { type: 'STRING' as const },
       },
-      tipVi: { type: 'STRING' as const },
-    },
-    required: [
-      'sentence', 'correctedSentence', 'hasErrors',
-      'tense', 'tenseVi', 'sentenceType', 'sentenceTypeVi',
-      'components', 'explanationVi', 'grammarRules', 'tipVi',
-    ],
-  };
+      required: [
+        'sentence', 'correctedSentence', 'hasErrors',
+        'tense', 'tenseVi', 'sentenceType', 'sentenceTypeVi',
+        'components', 'explanationVi', 'grammarRules', 'tipVi',
+      ],
+    };
 
-  const response = await this.ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: userPrompt,
-    config: {
-      systemInstruction,
-      responseMimeType: 'application/json',
-      responseSchema,
-      temperature: 0.3,
-    },
-  });
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: userPrompt,
+        config: {
+          systemInstruction,
+          responseMimeType: 'application/json',
+          responseSchema,
+          temperature: 0.3,
+        },
+      });
 
-  return JSON.parse(response.text as any) as GrammarAnalysisResult;
+      if (!response.text) {
+        throw new Error('Empty response from Gemini');
+      }
+
+      const result = JSON.parse(response.text) as GrammarAnalysisResult;
+
+      // Validate the required fields that drive the UI
+      if (!result.sentence || !result.components || !Array.isArray(result.components)) {
+        throw new Error('Invalid grammar analysis structure from Gemini');
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `Failed to analyze grammar for sentence "${sentence.substring(0, 80)}": ${error.message}`,
+        error.stack,
+      );
+      throw new InternalServerErrorException(
+        'Không thể phân tích ngữ pháp. Vui lòng thử lại sau.',
+      );
+    }
+  }
 }
-}
-
-

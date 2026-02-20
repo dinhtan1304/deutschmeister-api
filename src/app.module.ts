@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -20,6 +21,14 @@ import { AiModule } from './modules/ai/ai.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Rate limiting: two named throttlers so AI endpoints can use a tighter limit
+    // without affecting normal API usage.
+    //   default → 200 requests / minute per user (generous for normal navigation)
+    //   ai      →  10 requests / minute per user (Gemini API cost protection)
+    ThrottlerModule.forRoot([
+      { name: 'default', ttl: 60_000, limit: 200 },
+      { name: 'ai',      ttl: 60_000, limit: 10  },
+    ]),
     DatabaseModule,
     AuthModule,
     UsersModule,
@@ -37,6 +46,9 @@ import { AiModule } from './modules/ai/ai.module';
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // ThrottlerGuard runs after JwtAuthGuard so the userId is available for
+    // per-user tracking. Endpoints without @Throttle() use the 'default' limit.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

@@ -513,11 +513,17 @@ export class PersonalWordsService {
     // Optionally include new words (never reviewed)
     let newWords: any[] = [];
     if (includeNew && dueWords.length < limit) {
+      // Exclude IDs already in dueWords to prevent duplicates.
+      // A brand-new word has nextReviewAt = now() AND repetitions/totalReviews = 0,
+      // so it satisfies both queries without this guard.
+      const dueWordIds = dueWords.map((w) => w.id);
+
       const newWhere: Prisma.PersonalWordWhereInput = {
         userId,
         repetitions: 0,
         totalReviews: 0,
       };
+      if (dueWordIds.length > 0) newWhere.id = { notIn: dueWordIds };
       if (wordType) newWhere.wordType = wordType;
       if (level) newWhere.level = level;
 

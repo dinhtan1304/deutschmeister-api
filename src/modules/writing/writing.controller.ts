@@ -18,6 +18,7 @@ import {
   ApiResponse,
   ApiParam,
 } from '@nestjs/swagger';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -28,6 +29,9 @@ import { CreateWritingDto, SubmitWritingDto, QueryWritingHistoryDto } from './dt
 @Controller('writing')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
+// Most writing routes don't call Gemini — skip the throttler at class level
+// and opt specific AI endpoints in below with @Throttle.
+@SkipThrottle()
 export class WritingController {
   constructor(private readonly writingService: WritingService) {}
 
@@ -45,6 +49,9 @@ export class WritingController {
   @ApiOperation({ summary: 'Tạo đề bài viết mới (AI generate)' })
   @ApiResponse({ status: 201, description: 'Đề bài đã được tạo' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
+  // Calls Gemini API — 10 req/min per user to protect cost
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
   async generatePrompt(
     @CurrentUser('id') userId: string,
     @Body() dto: CreateWritingDto,
@@ -72,6 +79,9 @@ export class WritingController {
   @ApiResponse({ status: 200, description: 'Bài đã được chấm' })
   @ApiResponse({ status: 400, description: 'Bài đang chấm hoặc đã chấm' })
   @HttpCode(HttpStatus.OK)
+  // Calls Gemini API — 10 req/min per user to protect cost
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
   async submitAndGrade(
     @CurrentUser('id') userId: string,
     @Param('id') id: string,

@@ -91,6 +91,14 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
+    // Prune expired tokens for this user before inserting a new one.
+    // Without this, users who never explicitly logout accumulate one row per
+    // login indefinitely. We only delete *expired* tokens so that users with
+    // active sessions on multiple devices keep those sessions alive.
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId, expiresAt: { lt: new Date() } },
+    });
+
     await this.prisma.refreshToken.create({
       data: { token: refreshToken, userId, expiresAt },
     });
