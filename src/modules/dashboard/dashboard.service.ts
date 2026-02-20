@@ -122,8 +122,14 @@ export class DashboardService {
     const totalAnswers = totalCorrect + totalWrong;
     const accuracy = totalAnswers > 0 ? (totalCorrect / totalAnswers) * 100 : 0;
 
-    // Calculate total minutes
-    const totalMinutes = Math.round((gameStats._sum.duration || 0) / 60);
+    // Calculate total minutes:
+    // - Game sessions: actual duration recorded in seconds
+    // - SRS reviews: estimate 1 minute per review session
+    // - Topic study words: estimate 2 minutes per word learned
+    const gameDurationMinutes = Math.round((gameStats._sum.duration || 0) / 60);
+    const srsReviewMinutes = srsWordsLearned; // ~1 min per SRS word reviewed
+    const topicStudyMinutes = Math.round((topicWordsAggregate._sum.wordsLearned || 0) * 2); // ~2 min per word
+    const totalMinutes = gameDurationMinutes + srsReviewMinutes + topicStudyMinutes;
 
     // Get total topics
     const totalTopics = await this.prisma.topic.count({ where: { isActive: true } });
@@ -223,8 +229,9 @@ export class DashboardService {
       const date = t.lastStudiedAt
         ? this.toLocalDateStr(t.lastStudiedAt)
         : this.toLocalDateStr(t.updatedAt);
-      const count = Math.max(t.wordsLearned, 1);
-      activityMap.set(date, (activityMap.get(date) || 0) + count);
+      // Count each topic study session as 1 activity (same scale as games/reviews)
+      // Using wordsLearned caused massive scale inflation (e.g. 10 words = 10 "activities")
+      activityMap.set(date, (activityMap.get(date) || 0) + 1);
     });
 
     // Grammar activities
@@ -293,7 +300,7 @@ export class DashboardService {
             { lastReviewAt: { gte: sevenDaysAgo, lte: today } },
           ],
         },
-        select: { createdAt: true, lastReviewAt: true },
+        select: { createdAt: true, lastReviewAt: true, wordId: true },
       }),
       this.prisma.topicProgress.findMany({
         where: {
@@ -337,17 +344,17 @@ export class DashboardService {
       }
     });
 
+    // Count unique words learned/reviewed per day from SRS progress (source of truth).
+    // We do NOT also add topicProgress.wordsLearned because topic words eventually
+    // appear in the SRS progress table — counting both causes double-counting.
     const progressPerDay = new Map<string, Set<string>>();
     progressData.forEach((p) => {
+      // Count the word on the day it was first learned (createdAt)
       if (p.createdAt) {
         const dateStr = this.toLocalDateStr(p.createdAt);
         if (!progressPerDay.has(dateStr)) progressPerDay.set(dateStr, new Set());
-        progressPerDay.get(dateStr)!.add(`created-${p.createdAt.getTime()}`);
-      }
-      if (p.lastReviewAt) {
-        const dateStr = this.toLocalDateStr(p.lastReviewAt);
-        if (!progressPerDay.has(dateStr)) progressPerDay.set(dateStr, new Set());
-        progressPerDay.get(dateStr)!.add(`reviewed-${p.lastReviewAt.getTime()}`);
+        // Use wordId as key so each word is counted once per day even if reviewed multiple times
+        progressPerDay.get(dateStr)!.add(p.wordId ?? `created-${p.createdAt.getTime()}`);
       }
     });
 
@@ -358,13 +365,15 @@ export class DashboardService {
       }
     });
 
+    // topicStudyData is used only for gamesPlayed (as topic study sessions), not wordsLearned
     topicStudyData.forEach((t) => {
       const date = t.lastStudiedAt
         ? this.toLocalDateStr(t.lastStudiedAt)
         : this.toLocalDateStr(t.updatedAt);
       const entry = dateMap.get(date);
       if (entry) {
-        entry.wordsLearned += t.wordsLearned;
+        // Count topic study sessions as games played (activity indicator)
+        entry.gamesPlayed++;
       }
     });
 
@@ -640,24 +649,25 @@ export class DashboardService {
       }
     });
 
-    // Calculate streak from today backwards
+    // Calculate streak from today backwards.
+    // Grace rule: if today is not yet active, start counting from yesterday
+    // (user may not have studied yet today but streak is still valid)
     let streak = 0;
-    let currentDate = new Date(today);
-    let checkedToday = false;
+    const todayStr = this.toLocalDateStr(today);
 
+    // Determine start: today if active, otherwise yesterday
+    let startDate = new Date(today);
+    if (!activeDates.has(todayStr)) {
+      startDate.setDate(startDate.getDate() - 1);
+    }
+
+    // Count consecutive active days going backwards from startDate
     for (let i = 0; i < 60; i++) {
-      const dateStr = this.toLocalDateStr(currentDate);
-
+      const dateStr = this.toLocalDateStr(startDate);
       if (activeDates.has(dateStr)) {
         streak++;
-        currentDate.setDate(currentDate.getDate() - 1);
-        checkedToday = true;
+        startDate.setDate(startDate.getDate() - 1);
       } else {
-        if (!checkedToday && i === 0) {
-          currentDate.setDate(currentDate.getDate() - 1);
-          checkedToday = true;
-          continue;
-        }
         break;
       }
     }

@@ -36,7 +36,7 @@ export class UsersController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Get learning stats' })
-  getStats(@CurrentUser('sub') userId: string) {
+  getStats(@CurrentUser('id') userId: string) {
     return this.usersService.getStats(userId);
   }
 }

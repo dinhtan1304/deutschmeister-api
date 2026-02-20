@@ -26,14 +26,21 @@ export class UsersService {
     const settings = await this.prisma.settings.findUnique({
       where: { userId },
     });
-    if (!settings) throw new NotFoundException('Settings not found');
+    // New users may not have a settings row yet — return defaults instead of 404
+    if (!settings) {
+      return this.prisma.settings.create({
+        data: { userId },
+      });
+    }
     return settings;
   }
 
   async updateSettings(userId: string, dto: UpdateSettingsDto) {
-    return this.prisma.settings.update({
+    // upsert: create row if it doesn't exist yet (e.g. new user)
+    return this.prisma.settings.upsert({
       where: { userId },
-      data: dto,
+      update: dto,
+      create: { userId, ...dto },
     });
   }
 

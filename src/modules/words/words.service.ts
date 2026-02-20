@@ -48,77 +48,83 @@ export class WordsService {
   }
 
   /**
-   * OPTIMIZED: Get random words using database-level sampling
-   * Trước: Load TẤT CẢ words vào memory rồi shuffle
-   * Sau: Sử dụng TABLESAMPLE hoặc 2-phase query
-   * 
-   * Approach: Use a 2-phase query to avoid loading all rows
-   * Phase 1: Get total count matching filters
-   * Phase 2: Get random offset positions and fetch those specific rows
+   * Get random words using a single DB-level query.
+   * Uses ORDER BY RANDOM() LIMIT n — PostgreSQL handles randomisation
+   * entirely in one round-trip instead of N parallel skip/take queries.
    */
   async getRandom(dto: RandomWordsDto) {
     const { count = 10, gender, category, levels } = dto;
-    const where: Prisma.WordWhereInput = {};
 
-    if (gender) where.gender = gender;
-    if (category) where.category = category;
-    if (levels?.length) where.level = { in: levels };
+    // Build WHERE conditions for raw SQL
+    const conditions: string[] = [];
+    const values: (string | string[])[] = [];
+    let paramIdx = 1;
 
-    // Phase 1: Get total count
-    const totalCount = await this.prisma.word.count({ where });
-
-    if (totalCount === 0) {
-      return [];
+    if (gender) {
+      conditions.push(`gender = $${paramIdx++}`);
+      values.push(gender);
+    }
+    if (category) {
+      conditions.push(`category = $${paramIdx++}`);
+      values.push(category);
+    }
+    if (levels?.length) {
+      // ANY($n::text[]) works for array params in Prisma $queryRaw
+      conditions.push(`level = ANY($${paramIdx++})`);
+      values.push(levels);
     }
 
-    if (totalCount <= count) {
-      // If we need all or more than available, just return all shuffled
-      const words = await this.prisma.word.findMany({ where });
-      return this.shuffleArray(words);
-    }
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Phase 2: Generate random unique offsets and fetch
-    const randomOffsets = this.generateUniqueRandomNumbers(count, totalCount);
-
-    // Fetch words at random positions using skip/take
-    // This is more efficient than loading all into memory
-    const words = await Promise.all(
-      randomOffsets.map((offset) =>
-        this.prisma.word.findFirst({
-          where,
-          skip: offset,
-          take: 1,
-        }),
-      ),
+    // Single query: let PostgreSQL do the random sampling
+    const words = await this.prisma.$queryRawUnsafe<
+      {
+        id: string;
+        word: string;
+        article: string;
+        gender: string;
+        plural: string | null;
+        pronunciation: string | null;
+        image_url: string | null;
+        translation_en: string;
+        translation_vi: string | null;
+        category: string;
+        level: string;
+        frequency: number;
+        examples: string[];
+        tips: string[];
+        created_at: Date;
+        updated_at: Date;
+      }[]
+    >(
+      `SELECT * FROM words ${whereClause} ORDER BY RANDOM() LIMIT $${paramIdx}`,
+      ...values,
+      count,
     );
 
-    // Filter out any nulls (shouldn't happen but safe)
-    return words.filter((w): w is NonNullable<typeof w> => w !== null);
+    // Map snake_case columns back to camelCase to match Prisma model shape
+    return words.map((w) => ({
+      id: w.id,
+      word: w.word,
+      article: w.article,
+      gender: w.gender,
+      plural: w.plural,
+      pronunciation: w.pronunciation,
+      imageUrl: w.image_url,
+      translationEn: w.translation_en,
+      translationVi: w.translation_vi,
+      category: w.category,
+      level: w.level,
+      frequency: w.frequency,
+      examples: w.examples,
+      tips: w.tips,
+      createdAt: w.created_at,
+      updatedAt: w.updated_at,
+    }));
   }
 
   /**
-   * Fisher-Yates shuffle algorithm
-   */
-  private shuffleArray<T>(array: T[]): T[] {
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  }
-
-  /**
-   * Generate n unique random numbers in range [0, max)
-   */
-  private generateUniqueRandomNumbers(n: number, max: number): number[] {
-    const numbers = new Set<number>();
-    while (numbers.size < n) {
-      numbers.add(Math.floor(Math.random() * max));
-    }
-    return Array.from(numbers);
-  }
-
   async getStats() {
     const [total, byGender, byCategory, byLevel] = await Promise.all([
       this.prisma.word.count(),
@@ -152,4 +158,5 @@ export class WordsService {
 
     return index;
   }
+}*/
 }

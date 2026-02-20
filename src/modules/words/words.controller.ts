@@ -23,19 +23,19 @@ export class WordsController {
     return this.wordsService.getRandom(dto);
   }
 
-  @Public()
-  @Get('stats')
-  @ApiOperation({ summary: 'Get word statistics' })
-  getStats() {
-    return this.wordsService.getStats();
-  }
+  // @Public()
+  // @Get('stats')
+  // @ApiOperation({ summary: 'Get word statistics' })
+  // getStats() {
+  //   return this.wordsService.getStats();
+  // }
 
-  @Get('level-index')
-  @ApiOperation({ summary: 'Lấy vocabulary level index (word → level) cho Word Highlighting' })
-  @ApiResponse({ status: 200, description: 'Map { word: level }' })
-  async getLevelIndex() {
-    return this.wordsService.getLevelIndex();
-  }
+  // @Get('level-index')
+  // @ApiOperation({ summary: 'Lấy vocabulary level index (word → level) cho Word Highlighting' })
+  // @ApiResponse({ status: 200, description: 'Map { word: level }' })
+  // async getLevelIndex() {
+  //   return this.wordsService.getLevelIndex();
+  // }
 
   @Public()
   @Get(':id')
