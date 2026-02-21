@@ -245,39 +245,30 @@ export class TopicsService {
       where: { topicId },
       _max: { order: true },
     });
-    let nextOrder = (maxOrder._max.order || 0) + 1;
+    const startOrder = (maxOrder._max.order || 0) + 1;
 
-    const results = await Promise.all(
-      dto.wordIds.map(async (wordId) => {
-        try {
-          await this.prisma.topicWord.create({
-            data: {
-              topicId,
-              wordId,
-              isCore: dto.isCore || false,
-              order: nextOrder++,
-            },
-          });
-          return { wordId, status: 'added' as const };
-        } catch (error: any) {
-          if (error.code === 'P2002') {
-            return { wordId, status: 'skipped' as const };
-          }
-          return { wordId, status: 'error' as const, error: error.message };
-        }
-      }),
-    );
+    // Replaced N individual create() calls in Promise.all with a single createMany().
+    // The old approach fired N separate INSERT round-trips; createMany sends one batch query.
+    // skipDuplicates handles the unique constraint case (word already in topic) transparently.
+    const result = await this.prisma.topicWord.createMany({
+      data: dto.wordIds.map((wordId, i) => ({
+        topicId,
+        wordId,
+        isCore: dto.isCore || false,
+        order: startOrder + i,
+      })),
+      skipDuplicates: true,
+    });
 
     await this.updateWordCount(topicId);
 
-    const added = results.filter((r) => r.status === 'added').length;
-    const skipped = results.filter((r) => r.status === 'skipped').length;
+    const added = result.count;
+    const skipped = dto.wordIds.length - added;
 
     return {
       message: `Đã thêm ${added} từ, bỏ qua ${skipped} từ đã có`,
       added,
       skipped,
-      results,
     };
   }
 

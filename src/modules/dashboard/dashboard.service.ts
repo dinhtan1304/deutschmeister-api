@@ -54,6 +54,10 @@ export class DashboardService {
       // Grammar stats
       grammarCompleted,
       grammarTotal,
+      // Moved into Promise.all: previously awaited sequentially after the block,
+      // adding 2 extra serial DB round-trips on every getStats() call.
+      totalTopics,
+      streak,
     ] = await Promise.all([
       // Words learned (from SRS progress table with repetitions > 0)
       this.prisma.progress.count({
@@ -114,6 +118,13 @@ export class DashboardService {
       this.prisma.grammarLesson.count({
         where: { isActive: true },
       }),
+      // Total active topics — moved into Promise.all; was awaited sequentially
+      // after the block, adding an extra serial DB round-trip on every call.
+      this.prisma.topic.count({ where: { isActive: true } }),
+      // Streak — moved into Promise.all; was awaited sequentially after totalTopics,
+      // meaning calculateStreak's 4 internal parallel queries ran only after
+      // totalTopics finished. Now all run concurrently with the 11 queries above.
+      this.calculateStreak(userId),
     ]);
 
     // Calculate accuracy
@@ -130,12 +141,6 @@ export class DashboardService {
     const srsReviewMinutes = srsWordsLearned; // ~1 min per SRS word reviewed
     const topicStudyMinutes = Math.round((topicWordsAggregate._sum.wordsLearned || 0) * 2); // ~2 min per word
     const totalMinutes = gameDurationMinutes + srsReviewMinutes + topicStudyMinutes;
-
-    // Get total topics
-    const totalTopics = await this.prisma.topic.count({ where: { isActive: true } });
-
-    // Calculate streak
-    const streak = await this.calculateStreak(userId);
 
     // Use the greater of SRS words or topic words learned
     const topicWordsLearned = topicWordsAggregate._sum.wordsLearned || 0;
@@ -577,9 +582,11 @@ export class DashboardService {
       }
     });
 
-    // Sort by timestamp and return top items
+    // Sort by timestamp and return top items.
+    // ISO 8601 strings (from .toISOString()) are lexicographically ordered, so
+    // direct string comparison avoids allocating 2×N Date objects during the sort.
     return activities
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .sort((a, b) => (b.timestamp > a.timestamp ? 1 : b.timestamp < a.timestamp ? -1 : 0))
       .slice(0, limit);
   }
 

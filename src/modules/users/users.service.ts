@@ -23,16 +23,14 @@ export class UsersService {
   }
 
   async getSettings(userId: string) {
-    const settings = await this.prisma.settings.findUnique({
+    // upsert is atomic: eliminates the findUnique→create race condition where two
+    // simultaneous requests for a new user both see null and both attempt create,
+    // causing a unique constraint violation on the second one.
+    return this.prisma.settings.upsert({
       where: { userId },
+      update: {},
+      create: { userId },
     });
-    // New users may not have a settings row yet — return defaults instead of 404
-    if (!settings) {
-      return this.prisma.settings.create({
-        data: { userId },
-      });
-    }
-    return settings;
   }
 
   async updateSettings(userId: string, dto: UpdateSettingsDto) {
@@ -45,16 +43,16 @@ export class UsersService {
   }
 
   async getStats(userId: string) {
-    const [gamesPlayed, totalCorrect, totalWrong, favorites, wordsLearned] = await Promise.all([
+    // Merged correctAnswers + wrongAnswers into a single aggregate call (was 2 separate calls).
+    const [gamesPlayed, sessionAgg, favorites, wordsLearned] = await Promise.all([
       this.prisma.gameSession.count({ where: { userId } }),
-      this.prisma.gameSession.aggregate({ where: { userId }, _sum: { correctAnswers: true } }),
-      this.prisma.gameSession.aggregate({ where: { userId }, _sum: { wrongAnswers: true } }),
+      this.prisma.gameSession.aggregate({ where: { userId }, _sum: { correctAnswers: true, wrongAnswers: true } }),
       this.prisma.favorite.count({ where: { userId } }),
       this.prisma.progress.count({ where: { userId, repetitions: { gt: 0 } } }),
     ]);
 
-    const correct = totalCorrect._sum.correctAnswers || 0;
-    const wrong = totalWrong._sum.wrongAnswers || 0;
+    const correct = sessionAgg._sum.correctAnswers || 0;
+    const wrong = sessionAgg._sum.wrongAnswers || 0;
     const total = correct + wrong;
 
     return {
