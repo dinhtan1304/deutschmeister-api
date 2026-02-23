@@ -286,16 +286,20 @@ export class WritingService {
   // ═══════════════════════════════════════════════════════════
 
   async getErrorStats(userId: string) {
-    // Lấy tất cả errors của user
-    const errors = await this.prisma.writingError.findMany({
-      where: {
-        session: { userId },
-      },
-      select: {
-        errorType: true,
-        severity: true,
-      },
-    });
+    // Both queries are independent — run in parallel instead of sequentially
+    // (previously 2 serial round-trips; now 1 parallel round-trip).
+    const [errors, sessions] = await Promise.all([
+      this.prisma.writingError.findMany({
+        where: { session: { userId } },
+        select: { errorType: true, severity: true },
+      }),
+      this.prisma.writingSession.findMany({
+        where: { userId, status: 'GRADED' },
+        select: { overallScore: true },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ]);
 
     // Đếm theo loại lỗi
     const errorsByType: Record<string, number> = {};
@@ -314,14 +318,6 @@ export class WritingService {
         count,
         label: this.getErrorTypeLabel(type),
       }));
-
-    // Thống kê tổng quan
-    const sessions = await this.prisma.writingSession.findMany({
-      where: { userId, status: 'GRADED' },
-      select: { overallScore: true },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    });
 
     const averageScore = sessions.length > 0
       ? sessions.reduce((sum, s) => sum + (s.overallScore || 0), 0) / sessions.length

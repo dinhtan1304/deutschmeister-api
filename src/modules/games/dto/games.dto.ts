@@ -2,8 +2,8 @@ import { IsString, IsOptional, IsInt, IsIn, IsBoolean, Min } from 'class-validat
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class StartGameDto {
-  @ApiProperty({ enum: ['quick-quiz', 'flashcard', 'fill-blank', 'timed-challenge'] })
-  @IsIn(['quick-quiz', 'flashcard', 'fill-blank', 'timed-challenge'])
+  @ApiProperty({ enum: ['quick-quiz', 'flashcard', 'fill-blank', 'timed-challenge', 'gender-quiz', 'matching', 'spelling', 'listening'] })
+  @IsIn(['quick-quiz', 'flashcard', 'fill-blank', 'timed-challenge', 'gender-quiz', 'matching', 'spelling', 'listening'])
   gameType: string;
 
   @ApiProperty({ enum: ['beginner', 'intermediate', 'advanced'] })

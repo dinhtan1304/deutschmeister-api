@@ -24,25 +24,28 @@ export class GamesService {
     });
     if (!session) throw new NotFoundException('Session not found');
 
-    await this.prisma.gameAnswer.create({
-      data: {
-        sessionId: dto.sessionId,
-        wordId: dto.wordId,
-        selectedAnswer: dto.selectedAnswer,
-        correctAnswer: dto.correctAnswer,
-        isCorrect: dto.isCorrect,
-        responseTime: dto.responseTime,
-      },
-    });
-
-    // Update session stats
-    await this.prisma.gameSession.update({
-      where: { id: dto.sessionId },
-      data: {
-        correctAnswers: { increment: dto.isCorrect ? 1 : 0 },
-        wrongAnswers: { increment: dto.isCorrect ? 0 : 1 },
-      },
-    });
+    // gameAnswer.create and gameSession.update are independent — run in parallel
+    // instead of sequentially to halve the DB round-trips per answer submission.
+    await Promise.all([
+      this.prisma.gameAnswer.create({
+        data: {
+          sessionId: dto.sessionId,
+          wordId: dto.wordId,
+          selectedAnswer: dto.selectedAnswer,
+          correctAnswer: dto.correctAnswer,
+          isCorrect: dto.isCorrect,
+          responseTime: dto.responseTime,
+        },
+      }),
+      // Update session stats
+      this.prisma.gameSession.update({
+        where: { id: dto.sessionId },
+        data: {
+          correctAnswers: { increment: dto.isCorrect ? 1 : 0 },
+          wrongAnswers: { increment: dto.isCorrect ? 0 : 1 },
+        },
+      }),
+    ]);
 
     return { success: true };
   }

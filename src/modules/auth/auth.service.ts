@@ -91,22 +91,25 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    // Prune expired tokens for this user before inserting a new one.
-    // Without this, users who never explicitly logout accumulate one row per
-    // login indefinitely. We only delete *expired* tokens so that users with
-    // active sessions on multiple devices keep those sessions alive.
-    await this.prisma.refreshToken.deleteMany({
-      where: { userId, expiresAt: { lt: new Date() } },
-    });
-
-    await this.prisma.refreshToken.create({
-      data: { token: refreshToken, userId, expiresAt },
-    });
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, name: true, role: true },
-    });
+    // All three DB operations are independent — run in parallel instead of
+    // sequentially (previously 3 serial round-trips per login/register).
+    //
+    // deleteMany: prune expired tokens so users who never explicitly logout
+    //   don't accumulate one row per login indefinitely.
+    // create:     persist the new refresh token.
+    // findUnique: fetch the user shape required by the response DTO.
+    const [, , user] = await Promise.all([
+      this.prisma.refreshToken.deleteMany({
+        where: { userId, expiresAt: { lt: new Date() } },
+      }),
+      this.prisma.refreshToken.create({
+        data: { token: refreshToken, userId, expiresAt },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, name: true, role: true },
+      }),
+    ]);
 
     return { accessToken, refreshToken, user };
   }

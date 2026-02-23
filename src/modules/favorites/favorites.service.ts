@@ -1,5 +1,6 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class FavoritesService {
@@ -14,26 +15,32 @@ export class FavoritesService {
   }
 
   async add(userId: string, wordId: string) {
-    const existing = await this.prisma.favorite.findUnique({
-      where: { userId_wordId: { userId, wordId } },
-    });
-    if (existing) throw new ConflictException('Already in favorites');
-
-    return this.prisma.favorite.create({
-      data: { userId, wordId },
-      include: { word: true },
-    });
+    // Skip the findUnique pre-check: it adds a wasted SELECT round-trip and
+    // introduces a race condition — two concurrent requests both see null,
+    // both attempt create → unhandled DB unique-constraint error (500).
+    // Instead, attempt the INSERT directly and convert the Prisma P2002
+    // (unique constraint violation) into a clean ConflictException.
+    try {
+      return await this.prisma.favorite.create({
+        data: { userId, wordId },
+        include: { word: true },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException('Already in favorites');
+      }
+      throw e;
+    }
   }
 
   async remove(userId: string, wordId: string) {
-    const favorite = await this.prisma.favorite.findUnique({
-      where: { userId_wordId: { userId, wordId } },
+    // Replace findUnique + delete (2 round-trips) with deleteMany + count check
+    // (1 round-trip). deleteMany returns the number of deleted rows, so we can
+    // still throw NotFoundException when the record didn't exist.
+    const result = await this.prisma.favorite.deleteMany({
+      where: { userId, wordId },
     });
-    if (!favorite) throw new NotFoundException('Not in favorites');
-
-    await this.prisma.favorite.delete({
-      where: { id: favorite.id },
-    });
+    if (result.count === 0) throw new NotFoundException('Not in favorites');
     return { success: true };
   }
 
