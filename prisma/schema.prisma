@@ -26,7 +26,12 @@ model User {
   refreshTokens   RefreshToken[]
   settings        Settings?
   topicProgress   TopicProgress[]
-  writingSessions WritingSession[]
+  writingSessions     WritingSession[]
+  readingSessions     ReadingSession[]
+  examReadingSessions  ExamReadingSession[]
+  examWritingSessions  ExamWritingSession[]
+  listeningSessions    ListeningSession[]
+  examListeningSessions ExamListeningSession[]
 
   @@map("users")
 }
@@ -384,4 +389,118 @@ model GrammarProgress {
   @@index([userId])
   @@index([userId, status])
   @@map("grammar_progress")
+}
+
+model ReadingSession {
+  id              String    @id @default(cuid())
+  userId          String    @map("user_id")
+  cefrLevel       String    @map("cefr_level")
+  topic           String
+  textType        String    @map("text_type")
+  title           String
+  passage         String
+  questions       Json
+  vocabHighlights Json?     @map("vocab_highlights")
+  userAnswers     Json?     @map("user_answers")
+  score           Float?
+  totalQuestions  Int       @map("total_questions")
+  correctCount    Int       @default(0) @map("correct_count")
+  gradingDetails  Json?     @map("grading_details")
+  status          String    @default("DRAFT")
+  submittedAt     DateTime? @map("submitted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("reading_sessions")
+}
+
+model ExamReadingSession {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  examType       String    @map("exam_type")
+  cefrLevel      String    @map("cefr_level")
+  teile          Json
+  userAnswers    Json?     @map("user_answers")
+  teilScores     Json?     @map("teil_scores")
+  score          Float?
+  totalQuestions Int       @map("total_questions")
+  correctCount   Int       @default(0) @map("correct_count")
+  gradingDetails Json?     @map("grading_details")
+  status         String    @default("DRAFT")
+  submittedAt    DateTime? @map("submitted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("exam_reading_sessions")
+}
+
+model ExamWritingSession {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  examType    String    @map("exam_type")
+  cefrLevel   String    @map("cefr_level")
+  teile       Json
+  userTexts   Json?     @map("user_texts")
+  grading     Json?
+  totalScore  Float?    @map("total_score")
+  status      String    @default("DRAFT")
+  submittedAt DateTime? @map("submitted_at")
+  gradedAt    DateTime? @map("graded_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("exam_writing_sessions")
+}
+
+model ListeningSession {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  cefrLevel    String    @map("cefr_level")
+  scriptType   String    @map("script_type")
+  title        String
+  transcript   String
+  questions    Json
+  userAnswers  Json?     @map("user_answers")
+  score        Float?
+  correctCount Int       @default(0) @map("correct_count")
+  totalQ       Int       @default(0) @map("total_q")
+  status       String    @default("DRAFT")
+  submittedAt  DateTime? @map("submitted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("listening_sessions")
+}
+
+model ExamListeningSession {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  examType       String    @map("exam_type")
+  cefrLevel      String    @map("cefr_level")
+  teile          Json
+  userAnswers    Json?     @map("user_answers")
+  teilScores     Json?     @map("teil_scores")
+  score          Float?
+  totalQuestions Int       @map("total_questions")
+  correctCount   Int       @default(0) @map("correct_count")
+  gradingDetails Json?     @map("grading_details")
+  status         String    @default("DRAFT")
+  submittedAt    DateTime? @map("submitted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("exam_listening_sessions")
 }

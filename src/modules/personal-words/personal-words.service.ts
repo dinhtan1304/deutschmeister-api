@@ -804,16 +804,38 @@ async quickAddFromDictionary(userId: string, dto: QuickAddWordDto) {
     throw new ConflictException('Từ này đã có trong Word Bank');
   }
 
-  // Map gender → nomenData JSON
-  const nomenData = dto.gender
-    ? { article: dto.gender, gender: dto.gender, plural: dto.plural || '' }
+  // Map gender string → article (dto.gender may be 'masculine'/'feminine'/'neuter' or 'der'/'die'/'das')
+  const GENDER_TO_ARTICLE: Record<string, 'der' | 'die' | 'das'> = {
+    masculine: 'der', feminine: 'die', neuter: 'das',
+    der: 'der', die: 'die', das: 'das',
+  };
+  const ARTICLE_TO_GENDER: Record<string, string> = {
+    der: 'masculine', die: 'feminine', das: 'neuter',
+  };
+
+  const resolvedArticle = dto.gender ? GENDER_TO_ARTICLE[dto.gender] : undefined;
+  const resolvedGender = dto.gender
+    ? (ARTICLE_TO_GENDER[dto.gender] ?? dto.gender)
     : undefined;
+
+  const nomenData = resolvedArticle
+    ? { article: resolvedArticle, gender: resolvedGender, plural: dto.plural || '' }
+    : undefined;
+
+  // Determine wordType: use provided if valid, else 'nomen' when article/gender present, else 'andere'
+  const VALID_WORD_TYPES = new Set([
+    'nomen', 'verb', 'adjektiv', 'adverb', 'praposition',
+    'konjunktion', 'pronomen', 'partikel', 'andere',
+  ]);
+  const wordType = (dto.wordType && VALID_WORD_TYPES.has(dto.wordType))
+    ? dto.wordType
+    : (nomenData ? 'nomen' : 'andere');
 
   return this.prisma.personalWord.create({
     data: {
       userId,
       word: dto.word.trim(),
-      wordType: dto.wordType || 'andere',
+      wordType,
       nomenData: nomenData || undefined,
       translationVi: dto.translationVi?.trim() || '',
       translationEn: dto.translationEn?.trim() || '',

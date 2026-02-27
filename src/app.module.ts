@@ -17,6 +17,11 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { WritingModule } from './modules/writing/writing.module';
 import { GrammarModule } from './modules/grammar/grammar.module';
 import { AiModule } from './modules/ai/ai.module';
+import { ReadingModule } from './modules/reading/reading.module';
+import { ExamReadingModule } from './modules/exam-reading/exam-reading.module';
+import { ExamWritingModule } from './modules/exam-writing/exam-writing.module';
+import { ListeningModule } from './modules/listening/listening.module';
+import { ExamListeningModule } from './modules/exam-listening/exam-listening.module';
 
 @Module({
   imports: [
@@ -43,6 +48,11 @@ import { AiModule } from './modules/ai/ai.module';
     WritingModule,
     GrammarModule,
     AiModule,
+    ReadingModule,
+    ExamReadingModule,
+    ExamWritingModule,
+    ListeningModule,
+    ExamListeningModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
