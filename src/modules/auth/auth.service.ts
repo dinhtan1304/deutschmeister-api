@@ -29,7 +29,7 @@ export class AuthService {
       },
     });
 
-    return this.generateTokens(user.id, user.email);
+    return this.generateTokens(user.id, user.email, user.role);
   }
 
   async login(dto: LoginDto) {
@@ -43,7 +43,7 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
-    return this.generateTokens(user.id, user.email);
+    return this.generateTokens(user.id, user.email, user.role);
   }
 
   async refreshToken(token: string) {
@@ -62,7 +62,7 @@ export class AuthService {
       }
 
       await this.prisma.refreshToken.delete({ where: { id: stored.id } });
-      return this.generateTokens(stored.user.id, stored.user.email);
+      return this.generateTokens(stored.user.id, stored.user.email, stored.user.role);
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
@@ -73,14 +73,31 @@ export class AuthService {
   }
 
   async getMe(userId: string) {
-    return this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, email: true, name: true, avatar: true, role: true, createdAt: true, settings: true },
-    });
+    const [user, sub] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true, name: true, avatar: true, role: true, createdAt: true, settings: true },
+      }),
+      this.prisma.userSubscription.findUnique({ where: { userId } }),
+    ]);
+
+    const isPremium =
+      sub?.plan === 'premium' &&
+      sub.status === 'active' &&
+      (!sub.expiresAt || sub.expiresAt > new Date());
+
+    return {
+      ...user,
+      subscription: {
+        plan: isPremium ? 'premium' : 'free',
+        status: sub?.status ?? 'active',
+        expiresAt: sub?.expiresAt ?? null,
+      },
+    };
   }
 
-  private async generateTokens(userId: string, email: string) {
-    const payload = { sub: userId, email };
+  private async generateTokens(userId: string, email: string, role: string) {
+    const payload = { sub: userId, email, role };
 
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, {

@@ -5,6 +5,7 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PremiumGuard } from '../../common/guards/premium.guard';
 import { ExamReadingService } from './exam-reading.service';
 import { CreateExamReadingDto } from './dto/create-exam-reading.dto';
 import { SubmitExamReadingDto } from './dto/submit-exam-reading.dto';
@@ -12,7 +13,7 @@ import { QueryExamReadingDto } from './dto/query-exam-reading.dto';
 
 @ApiTags('exam-reading')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PremiumGuard)
 @SkipThrottle()
 @Controller('exam-reading')
 export class ExamReadingController {

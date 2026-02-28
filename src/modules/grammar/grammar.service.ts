@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { QueryLessonsDto, SubmitExerciseDto, SubmitResultDto } from './dto';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { QueryLessonsDto, SubmitExerciseDto, SubmitResultDto, CreateGrammarLessonDto, UpdateGrammarLessonDto } from './dto';
 import { PrismaService } from '../../database/prisma.service';
 
 @Injectable()
@@ -213,6 +213,68 @@ export class GrammarService {
     // ============================================
     // HELPER METHODS
     // ============================================
+
+    // ============================================
+    // ADMIN METHODS
+    // ============================================
+
+    async createLesson(dto: CreateGrammarLessonDto) {
+        const existing = await this.prisma.grammarLesson.findUnique({ where: { slug: dto.slug } });
+        if (existing) throw new ConflictException(`Slug "${dto.slug}" already exists`);
+
+        const { exercises, ...lessonData } = dto;
+        const lesson = await this.prisma.grammarLesson.create({
+            data: {
+                ...lessonData,
+                estimatedMinutes: dto.estimatedMinutes ?? 25,
+                order: dto.order ?? 0,
+                isActive: dto.isActive ?? true,
+                exercises: exercises?.length
+                    ? {
+                        create: exercises.map((ex, i) => ({
+                            exerciseType: ex.exerciseType,
+                            order: ex.order ?? i,
+                            questionDe: ex.questionDe,
+                            questionEn: ex.questionEn,
+                            questionVi: ex.questionVi,
+                            answerData: ex.answerData,
+                            explanation: ex.explanation,
+                            points: ex.points ?? 1,
+                        })),
+                    }
+                    : undefined,
+            },
+            include: { _count: { select: { exercises: true } } },
+        });
+
+        return { ...lesson, exerciseCount: lesson._count.exercises };
+    }
+
+    async updateLesson(id: string, dto: UpdateGrammarLessonDto) {
+        const lesson = await this.prisma.grammarLesson.findUnique({ where: { id } });
+        if (!lesson) throw new NotFoundException(`Lesson not found`);
+
+        if (dto.slug && dto.slug !== lesson.slug) {
+            const existing = await this.prisma.grammarLesson.findUnique({ where: { slug: dto.slug } });
+            if (existing) throw new ConflictException(`Slug "${dto.slug}" already exists`);
+        }
+
+        const { exercises, ...lessonData } = dto;
+        const updated = await this.prisma.grammarLesson.update({
+            where: { id },
+            data: lessonData,
+            include: { _count: { select: { exercises: true } } },
+        });
+
+        return { ...updated, exerciseCount: updated._count.exercises };
+    }
+
+    async deleteLesson(id: string) {
+        const lesson = await this.prisma.grammarLesson.findUnique({ where: { id } });
+        if (!lesson) throw new NotFoundException(`Lesson not found`);
+        await this.prisma.grammarLesson.delete({ where: { id } });
+        return { success: true };
+    }
 
     private checkAnswer(
         exerciseType: string,

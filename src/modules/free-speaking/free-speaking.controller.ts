@@ -2,6 +2,8 @@ import { Controller, Post, Get, Delete, Body, Param, Query, UseGuards, Req, Http
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PracticeQuotaGuard } from '../../common/guards/practice-quota.guard';
+import { Feature } from '../../common/decorators/feature.decorator';
 import { FreeSpeakingService } from './free-speaking.service';
 import { CreateFreeSpeakingDto } from './dto/create-free-speaking.dto';
 import { SubmitFreeSpeakingDto } from './dto/submit-free-speaking.dto';
@@ -16,6 +18,8 @@ export class FreeSpeakingController {
 
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('generate')
+  @Feature('freeSpeaking')
+  @UseGuards(PracticeQuotaGuard)
   generate(@Req() req: any, @Body() dto: CreateFreeSpeakingDto) {
     return this.service.generateSession(req.user.id, dto);
   }

@@ -2,10 +2,14 @@ import {
     Controller,
     Get,
     Post,
+    Put,
+    Delete,
     Body,
     Param,
     Query,
     UseGuards,
+    HttpCode,
+    HttpStatus,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -16,8 +20,9 @@ import {
     ApiQuery,
 } from '@nestjs/swagger';
 import { GrammarService } from './grammar.service';
-import { QueryLessonsDto, SubmitExerciseDto } from './dto';
+import { QueryLessonsDto, SubmitExerciseDto, CreateGrammarLessonDto, UpdateGrammarLessonDto } from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { AdminGuard } from '../../common/guards/admin.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -83,5 +88,42 @@ export class GrammarController {
         @Body() dto: SubmitExerciseDto,
     ) {
         return this.grammarService.submitExercises(userId, lessonId, dto);
+    }
+
+    // ============================================
+    // ADMIN ENDPOINTS
+    // ============================================
+
+    @Post('lessons')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: '[Admin] Create grammar lesson' })
+    @ApiResponse({ status: 201, description: 'Lesson created' })
+    @ApiResponse({ status: 409, description: 'Slug already exists' })
+    async createLesson(@Body() dto: CreateGrammarLessonDto) {
+        return this.grammarService.createLesson(dto);
+    }
+
+    @Put('lessons/:id')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: '[Admin] Update grammar lesson by ID' })
+    @ApiParam({ name: 'id', description: 'Lesson ID' })
+    @ApiResponse({ status: 200, description: 'Lesson updated' })
+    @ApiResponse({ status: 404, description: 'Lesson not found' })
+    async updateLesson(@Param('id') id: string, @Body() dto: UpdateGrammarLessonDto) {
+        return this.grammarService.updateLesson(id, dto);
+    }
+
+    @Delete('lessons/:id')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: '[Admin] Delete grammar lesson' })
+    @ApiParam({ name: 'id', description: 'Lesson ID' })
+    @ApiResponse({ status: 200, description: 'Lesson deleted' })
+    @ApiResponse({ status: 404, description: 'Lesson not found' })
+    async deleteLesson(@Param('id') id: string) {
+        return this.grammarService.deleteLesson(id);
     }
 }

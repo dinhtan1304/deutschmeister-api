@@ -1,5 +1,6 @@
-import { IsOptional, IsString, IsEnum, IsNotEmpty, IsObject } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString, IsNotEmpty, IsObject, IsInt, IsBoolean, IsIn, Min, IsArray } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class QueryLessonsDto {
     @ApiPropertyOptional({ description: 'Filter by CEFR level', enum: ['A1', 'A2', 'B1'] })
@@ -14,6 +15,115 @@ export class SubmitExerciseDto {
     @IsObject()
     answers: Record<number, string | string[]>;
 }
+
+// ─── Admin DTOs ───────────────────────────────────────────────────────────────
+
+export class CreateGrammarExerciseDto {
+    @ApiProperty()
+    @IsString()
+    exerciseType: string;
+
+    @ApiPropertyOptional({ default: 0 })
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    @Type(() => Number)
+    order?: number;
+
+    @ApiPropertyOptional()
+    @IsOptional()
+    @IsString()
+    questionDe?: string;
+
+    @ApiPropertyOptional()
+    @IsOptional()
+    @IsString()
+    questionEn?: string;
+
+    @ApiPropertyOptional()
+    @IsOptional()
+    @IsString()
+    questionVi?: string;
+
+    @ApiProperty({ description: 'JSON answer data' })
+    @IsObject()
+    answerData: Record<string, any>;
+
+    @ApiPropertyOptional({ description: 'JSON explanation' })
+    @IsOptional()
+    explanation?: Record<string, any>;
+
+    @ApiPropertyOptional({ default: 1 })
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Type(() => Number)
+    points?: number;
+}
+
+export class CreateGrammarLessonDto {
+    @ApiProperty()
+    @IsString()
+    slug: string;
+
+    @ApiProperty({ enum: ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] })
+    @IsIn(['A1', 'A2', 'B1', 'B2', 'C1', 'C2'])
+    level: string;
+
+    @ApiProperty()
+    @IsInt()
+    @Min(1)
+    @Type(() => Number)
+    lessonNumber: number;
+
+    @ApiProperty()
+    @IsString()
+    titleDe: string;
+
+    @ApiProperty()
+    @IsString()
+    titleEn: string;
+
+    @ApiProperty()
+    @IsString()
+    titleVi: string;
+
+    @ApiProperty({ description: 'JSON: { de: [], en: [], vi: [] }' })
+    @IsObject()
+    objectives: Record<string, any>;
+
+    @ApiProperty({ description: 'JSON theory content' })
+    @IsObject()
+    theoryContent: Record<string, any>;
+
+    @ApiPropertyOptional({ default: 25 })
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Type(() => Number)
+    estimatedMinutes?: number;
+
+    @ApiPropertyOptional({ default: 0 })
+    @IsOptional()
+    @IsInt()
+    @Min(0)
+    @Type(() => Number)
+    order?: number;
+
+    @ApiPropertyOptional({ default: true })
+    @IsOptional()
+    @IsBoolean()
+    isActive?: boolean;
+
+    @ApiPropertyOptional({ type: [CreateGrammarExerciseDto] })
+    @IsOptional()
+    @IsArray()
+    exercises?: CreateGrammarExerciseDto[];
+}
+
+export class UpdateGrammarLessonDto extends PartialType(CreateGrammarLessonDto) {}
+
+// ─── Response DTOs ────────────────────────────────────────────────────────────
 
 export class LessonResponseDto {
     id: string;

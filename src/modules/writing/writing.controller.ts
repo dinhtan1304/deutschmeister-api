@@ -20,8 +20,10 @@ import {
 } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PracticeQuotaGuard } from '../../common/guards/practice-quota.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { Feature } from '../../common/decorators/feature.decorator';
 import { WritingService } from './writing.service';
 import { CreateWritingDto, SubmitWritingDto, QueryWritingHistoryDto } from './dto';
 
@@ -46,6 +48,8 @@ export class WritingController {
 
   // ── POST /writing/generate ──
   @Post('generate')
+  @Feature('writing')
+  @UseGuards(PracticeQuotaGuard)
   @ApiOperation({ summary: 'Tạo đề bài viết mới (AI generate)' })
   @ApiResponse({ status: 201, description: 'Đề bài đã được tạo' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })

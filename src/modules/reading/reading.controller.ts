@@ -19,8 +19,10 @@ import {
 } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PracticeQuotaGuard } from '../../common/guards/practice-quota.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { Feature } from '../../common/decorators/feature.decorator';
 import { ReadingService } from './reading.service';
 import { CreateReadingDto, QueryReadingHistoryDto } from './dto/create-reading.dto';
 import { SubmitReadingDto } from './dto/submit-reading.dto';
@@ -44,6 +46,8 @@ export class ReadingController {
 
   // ── POST /reading/generate ──
   @Post('generate')
+  @Feature('reading')
+  @UseGuards(PracticeQuotaGuard)
   @ApiOperation({ summary: 'AI tạo bài đọc hiểu mới' })
   @ApiResponse({ status: 201, description: 'Bài đọc đã được tạo' })
   @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })

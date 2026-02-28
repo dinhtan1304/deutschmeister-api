@@ -34,8 +34,48 @@ model User {
   examListeningSessions  ExamListeningSession[]
   examSpeakingSessions   ExamSpeakingSession[]
   freeSpeakingSessions   FreeSpeakingSession[]
+  subscription        UserSubscription?
+  payments            Payment[]
 
   @@map("users")
+}
+
+model UserSubscription {
+  id          String    @id @default(cuid())
+  userId      String    @unique @map("user_id")
+  plan        String    @default("free")    // "free" | "premium"
+  status      String    @default("active")  // "active" | "expired" | "cancelled"
+  expiresAt   DateTime? @map("expires_at")  // null = no expiry
+  grantedBy   String?   @map("granted_by")  // admin userId
+  note        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments    Payment[]
+
+  @@map("user_subscriptions")
+}
+
+model Payment {
+  id             String           @id @default(cuid())
+  userId         String           @map("user_id")
+  subscriptionId String?          @map("subscription_id")
+  plan           String           // "premium"
+  period         String           // "monthly" | "yearly"
+  amount         Int              // VND
+  status         String           @default("pending") // "pending" | "confirmed" | "rejected"
+  transferNote   String?          @map("transfer_note")  // nội dung chuyển khoản
+  adminNote      String?          @map("admin_note")
+  confirmedBy    String?          @map("confirmed_by")  // admin userId
+  confirmedAt    DateTime?        @map("confirmed_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   UserSubscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@map("payments")
 }
 
 model RefreshToken {

@@ -2,6 +2,7 @@ import { Controller, Post, Get, Delete, Body, Param, Query, UseGuards, Req, Http
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PremiumGuard } from '../../common/guards/premium.guard';
 import { ExamSpeakingService } from './exam-speaking.service';
 import { CreateExamSpeakingDto } from './dto/create-exam-speaking.dto';
 import { SubmitExamSpeakingDto } from './dto/submit-exam-speaking.dto';
@@ -9,7 +10,7 @@ import { QueryExamSpeakingDto } from './dto/query-exam-speaking.dto';
 
 @ApiTags('exam-speaking')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PremiumGuard)
 @SkipThrottle()
 @Controller('exam-speaking')
 export class ExamSpeakingController {

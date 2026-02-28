@@ -1,8 +1,12 @@
-import { Controller, Get, Query, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Query, Param, Body, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { WordsService } from './words.service';
 import { SearchWordsDto, RandomWordsDto } from './dto/words.dto';
+import { CreateWordDto } from './dto/create-word.dto';
+import { UpdateWordDto } from './dto/update-word.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { AdminGuard } from '../../common/guards/admin.guard';
 
 @ApiTags('words')
 @Controller('words')
@@ -23,19 +27,29 @@ export class WordsController {
     return this.wordsService.getRandom(dto);
   }
 
-  // @Public()
-  // @Get('stats')
-  // @ApiOperation({ summary: 'Get word statistics' })
-  // getStats() {
-  //   return this.wordsService.getStats();
-  // }
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @ApiBearerAuth()
+  @Post()
+  @ApiOperation({ summary: '[Admin] Create word' })
+  createWord(@Body() dto: CreateWordDto) {
+    return this.wordsService.createWord(dto);
+  }
 
-  // @Get('level-index')
-  // @ApiOperation({ summary: 'Lấy vocabulary level index (word → level) cho Word Highlighting' })
-  // @ApiResponse({ status: 200, description: 'Map { word: level }' })
-  // async getLevelIndex() {
-  //   return this.wordsService.getLevelIndex();
-  // }
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @ApiBearerAuth()
+  @Patch(':id')
+  @ApiOperation({ summary: '[Admin] Update word' })
+  updateWord(@Param('id') id: string, @Body() dto: UpdateWordDto) {
+    return this.wordsService.updateWord(id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @ApiBearerAuth()
+  @Delete(':id')
+  @ApiOperation({ summary: '[Admin] Delete word' })
+  deleteWord(@Param('id') id: string) {
+    return this.wordsService.deleteWord(id);
+  }
 
   @Public()
   @Get(':id')

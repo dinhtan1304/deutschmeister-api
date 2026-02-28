@@ -2,6 +2,8 @@ import { Controller, Post, Get, Delete, Body, Param, Query, UseGuards, Req, Http
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { PracticeQuotaGuard } from '../../common/guards/practice-quota.guard';
+import { Feature } from '../../common/decorators/feature.decorator';
 import { ListeningService } from './listening.service';
 import { CreateListeningDto } from './dto/create-listening.dto';
 import { SubmitListeningDto } from './dto/submit-listening.dto';
@@ -16,6 +18,8 @@ export class ListeningController {
 
   @Throttle({ default: { limit: 15, ttl: 60000 } })
   @Post('generate')
+  @Feature('listening')
+  @UseGuards(PracticeQuotaGuard)
   generate(@Req() req: any, @Body() dto: CreateListeningDto) {
     return this.service.generateSession(req.user.id, dto);
   }

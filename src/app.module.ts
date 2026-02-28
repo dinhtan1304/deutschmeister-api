@@ -24,6 +24,8 @@ import { ListeningModule } from './modules/listening/listening.module';
 import { ExamListeningModule } from './modules/exam-listening/exam-listening.module';
 import { ExamSpeakingModule } from './modules/exam-speaking/exam-speaking.module';
 import { FreeSpeakingModule } from './modules/free-speaking/free-speaking.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -57,6 +59,8 @@ import { FreeSpeakingModule } from './modules/free-speaking/free-speaking.module
     ExamListeningModule,
     ExamSpeakingModule,
     FreeSpeakingModule,
+    AdminModule,
+    SubscriptionsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

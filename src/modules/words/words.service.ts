@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { SearchWordsDto, RandomWordsDto } from './dto/words.dto';
+import { CreateWordDto } from './dto/create-word.dto';
+import { UpdateWordDto } from './dto/update-word.dto';
 
 @Injectable()
 export class WordsService {
@@ -122,6 +124,43 @@ export class WordsService {
       createdAt: w.created_at,
       updatedAt: w.updated_at,
     }));
+  }
+
+  async createWord(dto: CreateWordDto) {
+    return this.prisma.word.create({
+      data: {
+        word: dto.word,
+        article: dto.article,
+        gender: dto.gender,
+        plural: dto.plural,
+        pronunciation: dto.pronunciation,
+        imageUrl: dto.imageUrl,
+        translationEn: dto.translationEn,
+        translationVi: dto.translationVi,
+        category: dto.category,
+        level: dto.level,
+        frequency: dto.frequency ?? 0,
+        examples: dto.examples ?? [],
+        tips: dto.tips ?? [],
+      },
+    });
+  }
+
+  async updateWord(id: string, dto: UpdateWordDto) {
+    const word = await this.prisma.word.findUnique({ where: { id } });
+    if (!word) throw new NotFoundException('Word not found');
+    return this.prisma.word.update({ where: { id }, data: dto as any });
+  }
+
+  async deleteWord(id: string) {
+    const word = await this.prisma.word.findUnique({ where: { id } });
+    if (!word) throw new NotFoundException('Word not found');
+    // GameAnswer references Word without cascade — delete manually first
+    await this.prisma.$transaction([
+      this.prisma.gameAnswer.deleteMany({ where: { wordId: id } }),
+      this.prisma.word.delete({ where: { id } }),
+    ]);
+    return { success: true };
   }
 
   /**
