@@ -156,7 +156,17 @@ export class AdminService {
         },
       };
     } else if (plan === 'free') {
-      where.subscription = { is: null };
+      // "Free" = no active premium: covers no-subscription, plan=free, or expired premium
+      const now = new Date();
+      where.NOT = {
+        subscription: {
+          is: {
+            plan: 'premium',
+            status: 'active',
+            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+          },
+        },
+      };
     }
 
     const [items, total] = await Promise.all([

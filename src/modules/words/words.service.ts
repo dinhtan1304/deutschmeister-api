@@ -149,7 +149,7 @@ export class WordsService {
   async updateWord(id: string, dto: UpdateWordDto) {
     const word = await this.prisma.word.findUnique({ where: { id } });
     if (!word) throw new NotFoundException('Word not found');
-    return this.prisma.word.update({ where: { id }, data: dto as any });
+    return this.prisma.word.update({ where: { id }, data: dto as Prisma.WordUpdateInput });
   }
 
   async deleteWord(id: string) {
@@ -163,39 +163,4 @@ export class WordsService {
     return { success: true };
   }
 
-  /**
-  async getStats() {
-    const [total, byGender, byCategory, byLevel] = await Promise.all([
-      this.prisma.word.count(),
-      this.prisma.word.groupBy({ by: ['gender'], _count: { id: true } }),
-      this.prisma.word.groupBy({ by: ['category'], _count: { id: true } }),
-      this.prisma.word.groupBy({ by: ['level'], _count: { id: true } }),
-    ]);
-
-    return {
-      total,
-      byGender: byGender.map(g => ({ gender: g.gender, count: g._count.id })),
-      byCategory: byCategory.map(c => ({ category: c.category, count: c._count.id })),
-      byLevel: byLevel.map(l => ({ level: l.level, count: l._count.id })),
-    };
-  }
-
-  async getLevelIndex(): Promise<Record<string, string>> {
-    const words = await this.prisma.word.findMany({
-      select: {
-        word: true,
-        level: true,
-      },
-    });
-
-    const index: Record<string, string> = {};
-    for (const w of words) {
-      if (w.word && w.level) {
-        index[w.word.toLowerCase()] = w.level;
-      }
-    }
-
-    return index;
-  }
-}*/
 }
