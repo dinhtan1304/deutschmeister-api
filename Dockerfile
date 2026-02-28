@@ -5,16 +5,20 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/
 
 WORKDIR /app
 
-# Prisma 7 validates env vars referenced in schema.prisma even during `prisma generate`.
-# A dummy URL is sufficient — no real DB connection is made during code generation.
-# DO NOT put real credentials here; use Railway env vars for runtime.
+# Prisma 7 validates env vars in schema.prisma even during `prisma generate`.
+# A dummy URL is fine — no real DB connection is made during type generation.
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
 
 COPY package*.json ./
 COPY prisma ./prisma/
+
+# Install ALL deps (including devDeps for nest build) + compile native modules (bcrypt etc.)
+# postinstall runs `prisma generate` with the dummy DATABASE_URL above
 RUN npm ci
 
 COPY . .
+
+# Compile TypeScript → dist/
 RUN npm run build
 
 # ── Stage 2: production ──────────────────────────────────────────────────────
@@ -26,15 +30,11 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-COPY package*.json ./
-COPY prisma ./prisma/
-# --ignore-scripts skips postinstall so prisma generate is not re-run here.
-# Real DATABASE_URL is injected by Railway at container runtime, not build time.
-RUN npm ci --omit=dev --ignore-scripts
-
+# Copy the entire node_modules from builder so native addons (bcrypt, etc.)
+# are already compiled for the same OS/arch — no recompile needed.
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
+COPY package*.json ./
 
 EXPOSE 3000
 

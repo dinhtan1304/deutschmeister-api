@@ -4,7 +4,9 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "node dist/main"
-healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+# Removed healthcheckPath — Railway will use the simpler TCP port check
+# (is the app listening on PORT?) instead of an HTTP endpoint check.
+# HTTP health checks are stricter and require the full app to be ready.
+healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
