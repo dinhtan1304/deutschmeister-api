@@ -1429,4 +1429,308 @@ Regeln:
       required: ['texts', 'questions'],
     };
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXAM SPEAKING — Generate Sprechen exam + Grade
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async generateExamSpeaking(examType: 'GOETHE' | 'TELC', cefrLevel: string): Promise<any[]> {
+    const { EXAM_SPEAKING_CONFIG } = await import('../exam-speaking/data/exam-speaking-config');
+    const config = EXAM_SPEAKING_CONFIG[examType]?.[cefrLevel];
+    if (!config) throw new InternalServerErrorException('Config not found');
+
+    const totalTeile = config.teile.length;
+    const teile = await Promise.all(
+      config.teile.map((tc, idx) => this.generateSpeakingTeil(idx + 1, tc, examType, cefrLevel, totalTeile)),
+    );
+    return teile;
+  }
+
+  private async generateSpeakingTeil(
+    number: number,
+    tc: { type: string; prepTime: number; speakTime: number },
+    examType: string,
+    level: string,
+    totalTeile: number,
+  ): Promise<any> {
+    const taskTypeLabels: Record<string, string> = {
+      sich_vorstellen: 'Sich vorstellen',
+      bitten:          'Um etwas bitten',
+      reagieren:       'Auf Bitten reagieren',
+      ueber_sich:      'Über sich sprechen',
+      planen:          'Gemeinsam etwas planen',
+      praesentation:   'Präsentation halten',
+      monolog:         'Monolog halten',
+      dialog:          'Dialog / Gespräch führen',
+    };
+    const taskLabel = taskTypeLabels[tc.type] || tc.type;
+    const hasPrepTime = tc.prepTime > 0;
+    const speakSec = tc.speakTime;
+
+    const systemInstruction = `Du bist ein Sprechen-Prüfungs-Ersteller für das ${examType}-Zertifikat Deutsch (Niveau ${level}).
+Erstelle den Inhalt für Sprechen-Teil ${number} von ${totalTeile}: "${taskLabel}".
+
+WICHTIG:
+- instruction: Aufgabenstellung auf Deutsch (klar, kurz, wie im echten Prüfungsbogen)
+- instructionVi: Hướng dẫn tiếng Việt (ngắn gọn, giúp người học hiểu nhiệm vụ)
+- keyPoints: 3-4 Punkte, die der Lernende ansprechen soll (auf Deutsch, sehr kurz, z.B. "Name und Alter")
+- wordCards: Nur bei "bitten"/"reagieren": 3-4 Kärtchen mit deutschen Begriffen (z.B. "Kugelschreiber", "Stuhl")
+  Bei anderen Typen: leeres Array []
+- partnerLines: Nur bei "reagieren"/"dialog"/"planen": 2-3 Sätze vom Prüfer/Partner (auf Deutsch)
+  Bei anderen Typen: leeres Array []
+- prepTimeSeconds: ${tc.prepTime}
+- speakTimeSeconds: ${speakSec}
+- maxPoints: 5`;
+
+    const schema = {
+      type: 'object',
+      properties: {
+        instruction:      { type: 'string' },
+        instructionVi:    { type: 'string' },
+        keyPoints:        { type: 'array', items: { type: 'string' } },
+        wordCards:        { type: 'array', items: { type: 'string' } },
+        partnerLines:     { type: 'array', items: { type: 'string' } },
+      },
+      required: ['instruction', 'instructionVi', 'keyPoints', 'wordCards', 'partnerLines'],
+    };
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Erstelle Sprechen-Teil ${number} (${taskLabel}) für ${examType} ${level}. Sprechzeit: ${speakSec}s${hasPrepTime ? `, Vorbereitungszeit: ${tc.prepTime}s` : ''}.`,
+        config: { systemInstruction, responseMimeType: 'application/json', responseSchema: schema, temperature: 0.75 },
+      });
+      const raw = JSON.parse(response.text!);
+      return {
+        number,
+        taskType: tc.type,
+        instruction:      raw.instruction,
+        instructionVi:    raw.instructionVi,
+        keyPoints:        raw.keyPoints || [],
+        wordCards:        raw.wordCards || [],
+        partnerLines:     raw.partnerLines || [],
+        prepTimeSeconds:  tc.prepTime,
+        speakTimeSeconds: tc.speakTime,
+        maxPoints:        5,
+      };
+    } catch (e) {
+      this.logger.error(`generateSpeakingTeil ${number} ${tc.type}: ${e.message}`);
+      throw new InternalServerErrorException('Không thể tạo đề nói. Vui lòng thử lại.');
+    }
+  }
+
+  async gradeExamSpeakingTeil(
+    teil: any,
+    audioBase64: string,
+    mimeType: string,
+    transcript: string,
+    cefrLevel: string,
+  ): Promise<any> {
+    const systemInstruction = `Du bist ein Deutsch-Prüfer für Vietnamese Lernende (Niveau ${cefrLevel}).
+Bewerte die Sprechleistung anhand von 4 Kriterien (je 0-25 Punkte = 100 Punkte gesamt):
+
+1. aufgabe (0-25): Aufgabenerfüllung — Hat der Lernende alle keyPoints angesprochen?
+2. aussprache (0-25): Aussprache & Intonation — Aus dem Audio erkennbar
+3. grammatik (0-25): Grammatik & Satzbau — Aus dem Transcript
+4. wortschatz (0-25): Wortschatz & Ausdruck
+
+score = Summe aller 4 Kriterien (0-100)
+feedbackVi: 2-3 Sätze auf Vietnamesisch (freundlich, konstruktiv)
+feedbackDe: 1-2 Sätze auf Deutsch (für Lernende)
+corrections: max 3 konkrete Korrekturen als Strings ("Falsch: X → Richtig: Y")
+strengths: 2 positive Aspekte auf Vietnamesisch
+
+WICHTIG: Wenn das Audio leer oder zu kurz ist (< 5 Wörter im Transcript), gib score=0 für alle Kriterien.`;
+
+    const gradingSchema = {
+      type: 'object',
+      properties: {
+        score:          { type: 'number' },
+        criteriaScores: {
+          type: 'object',
+          properties: {
+            aufgabe:    { type: 'number' },
+            aussprache: { type: 'number' },
+            grammatik:  { type: 'number' },
+            wortschatz: { type: 'number' },
+          },
+          required: ['aufgabe', 'aussprache', 'grammatik', 'wortschatz'],
+        },
+        feedbackVi:  { type: 'string' },
+        feedbackDe:  { type: 'string' },
+        corrections: { type: 'array', items: { type: 'string' } },
+        strengths:   { type: 'array', items: { type: 'string' } },
+      },
+      required: ['score', 'criteriaScores', 'feedbackVi', 'feedbackDe', 'corrections', 'strengths'],
+    };
+
+    const promptText = `Aufgabe: "${teil.instruction}"
+Schlüsselpunkte: ${(teil.keyPoints || []).join(', ')}
+Transcript (Web Speech API): "${transcript || '(leer)'}"
+
+Bitte bewerte die Aufnahme nach den 4 Kriterien.`;
+
+    try {
+      const contentsPayload: any = audioBase64
+        ? {
+            role: 'user',
+            parts: [
+              { text: promptText },
+              { inlineData: { mimeType: mimeType || 'audio/webm', data: audioBase64 } },
+            ],
+          }
+        : promptText;
+
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: contentsPayload,
+        config: { systemInstruction, responseMimeType: 'application/json', responseSchema: gradingSchema, temperature: 0.3 },
+      });
+      const raw = JSON.parse(response.text!);
+      // Ensure score is sum of criteria
+      const cs = raw.criteriaScores;
+      const computedScore = (cs.aufgabe + cs.aussprache + cs.grammatik + cs.wortschatz);
+      return { ...raw, score: Math.min(100, Math.max(0, computedScore)) };
+    } catch (e) {
+      this.logger.error(`gradeExamSpeakingTeil ${teil.number}: ${e.message}`);
+      // Return a zero-score grading on error rather than crashing the whole submit
+      return {
+        score: 0,
+        criteriaScores: { aufgabe: 0, aussprache: 0, grammatik: 0, wortschatz: 0 },
+        feedbackVi: 'Không thể chấm bài do lỗi kỹ thuật.',
+        feedbackDe: 'Bewertung fehlgeschlagen.',
+        corrections: [],
+        strengths: [],
+      };
+    }
+  }
+
+  // ─── Free Speaking: Generate Prompt ────────────────────────────────────────
+  async generateFreeSpeakingPrompt(cefrLevel: string, topicType: string): Promise<{
+    prompt: string;
+    promptVi: string;
+    keyPoints: string[];
+  }> {
+    const topicLabels: Record<string, string> = {
+      sich_vorstellen: 'Sich vorstellen (giới thiệu bản thân)',
+      alltag:          'Alltag und Freizeit (cuộc sống hàng ngày và giải trí)',
+      wohnen:          'Wohnen und Umgebung (nhà ở và môi trường sống)',
+      arbeit:          'Arbeit und Beruf (công việc và nghề nghiệp)',
+      familie:         'Familie und Freunde (gia đình và bạn bè)',
+      reisen:          'Reisen und Transport (đi lại và phương tiện)',
+      einkaufen:       'Einkaufen und Konsum (mua sắm)',
+      gesundheit:      'Gesundheit und Sport (sức khỏe và thể thao)',
+      meinung:         'Meinungen äußern (bày tỏ quan điểm)',
+    };
+
+    const schema = {
+      type: 'object',
+      properties: {
+        prompt:    { type: 'string', description: 'German instruction/question for the speaker (1-2 sentences)' },
+        promptVi:  { type: 'string', description: 'Vietnamese translation of the prompt' },
+        keyPoints: { type: 'array', items: { type: 'string' }, description: '3-5 key points/hints the user should address' },
+      },
+      required: ['prompt', 'promptVi', 'keyPoints'],
+    };
+
+    const systemPrompt = `You are a German language exam assistant. Generate a free-speaking prompt for a CEFR ${cefrLevel} student on the topic: ${topicLabels[topicType] ?? topicType}.
+
+The prompt should be:
+- A natural German question or instruction that a teacher would ask
+- Appropriate vocabulary and complexity for ${cefrLevel}
+- Varied — do NOT always use the same sentence structure
+- For A1/A2: short, concrete, everyday topics
+- For B1: slightly more abstract, opinion-based prompts
+
+Return keyPoints as short hints (in Vietnamese) about what content to include.`;
+
+    const response = await this.ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { role: 'user', parts: [{ text: systemPrompt }] },
+      config: { responseMimeType: 'application/json', responseSchema: schema as any, temperature: 0.85 },
+    });
+
+    return JSON.parse(response.text ?? '{}');
+  }
+
+  // ─── Free Speaking: Grade ───────────────────────────────────────────────────
+  async gradeFreeSpeaking(
+    prompt: string,
+    audioBase64: string,
+    mimeType: string,
+    transcript: string,
+    cefrLevel: string,
+  ): Promise<{
+    score: number;
+    criteriaScores: { aufgabe: number; aussprache: number; grammatik: number; wortschatz: number };
+    feedbackVi: string;
+    feedbackDe: string;
+    corrections: string[];
+    strengths: string[];
+  }> {
+    const schema = {
+      type: 'object',
+      properties: {
+        score: { type: 'number' },
+        criteriaScores: {
+          type: 'object',
+          properties: {
+            aufgabe:    { type: 'number', description: '0-25: Did they address the prompt?' },
+            aussprache: { type: 'number', description: '0-25: Pronunciation quality from audio' },
+            grammatik:  { type: 'number', description: '0-25: Grammar correctness' },
+            wortschatz: { type: 'number', description: '0-25: Vocabulary range and accuracy' },
+          },
+          required: ['aufgabe', 'aussprache', 'grammatik', 'wortschatz'],
+        },
+        feedbackVi:  { type: 'string', description: 'Overall feedback in Vietnamese (2-3 sentences)' },
+        feedbackDe:  { type: 'string', description: 'Overall feedback in German (1-2 sentences)' },
+        corrections: { type: 'array', items: { type: 'string' }, description: 'Up to 4 specific grammar/vocab corrections' },
+        strengths:   { type: 'array', items: { type: 'string' }, description: 'Up to 3 strengths observed' },
+      },
+      required: ['score', 'criteriaScores', 'feedbackVi', 'feedbackDe', 'corrections', 'strengths'],
+    };
+
+    const systemPrompt = `You are a certified German language examiner. Grade this free-speaking response for a CEFR ${cefrLevel} student.
+
+Prompt given to student: "${prompt}"
+
+Grading criteria (each 0-25 points):
+- Aufgabe (aufgabe): Did the student address the prompt adequately?
+- Aussprache (aussprache): Pronunciation — listen to the audio carefully
+- Grammatik (grammatik): Grammar accuracy in the transcript
+- Wortschatz (wortschatz): Vocabulary range and appropriateness for ${cefrLevel}
+
+Total score = sum of 4 criteria (max 100).
+Be realistic but encouraging. For ${cefrLevel} students, adjust expectations accordingly.`;
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: {
+          role: 'user',
+          parts: [
+            { text: systemPrompt },
+            { inlineData: { mimeType, data: audioBase64 } },
+            { text: `Web Speech transcript: "${transcript || '(no transcript available)'}"` },
+          ],
+        } as any,
+        config: { responseMimeType: 'application/json', responseSchema: schema as any, temperature: 0.3 },
+      });
+
+      const raw = JSON.parse(response.text ?? '{}');
+      const cs = raw.criteriaScores;
+      const computedScore = cs.aufgabe + cs.aussprache + cs.grammatik + cs.wortschatz;
+      return { ...raw, score: Math.min(100, Math.max(0, computedScore)) };
+    } catch (e) {
+      this.logger.error(`gradeFreeSpeaking: ${e.message}`);
+      return {
+        score: 0,
+        criteriaScores: { aufgabe: 0, aussprache: 0, grammatik: 0, wortschatz: 0 },
+        feedbackVi: 'Không thể chấm bài do lỗi kỹ thuật.',
+        feedbackDe: 'Bewertung fehlgeschlagen.',
+        corrections: [],
+        strengths: [],
+      };
+    }
+  }
 }
