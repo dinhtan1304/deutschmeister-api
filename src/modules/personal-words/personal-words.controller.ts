@@ -3,12 +3,14 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
   Query,
   UseGuards,
   Res,
+  HttpCode,
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
@@ -32,6 +34,7 @@ import {
   SRSQueryDto,
 } from './dto/personal-words.dto';
 import { QuickAddWordDto } from './dto/quick-add-word.dto';
+import { CreateCollectionDto, UpdateCollectionDto, AddWordToCollectionDto } from './dto/collection.dto';
 
 @ApiTags('personal-words')
 @ApiBearerAuth()
@@ -255,5 +258,74 @@ async quickAddFromDictionary(
   @ApiResponse({ status: 200, description: 'Number of words reset' })
   resetAllSRS(@CurrentUser('id') userId: string) {
     return this.service.resetAllSRS(userId);
+  }
+
+  // ============================================
+  // COLLECTIONS
+  // ============================================
+
+  @Get('collections')
+  @ApiOperation({ summary: 'Lấy danh sách thư mục' })
+  getCollections(@CurrentUser('id') userId: string) {
+    return this.service.getCollections(userId);
+  }
+
+  @Post('collections')
+  @ApiOperation({ summary: 'Tạo thư mục mới' })
+  createCollection(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateCollectionDto,
+  ) {
+    return this.service.createCollection(userId, dto);
+  }
+
+  @Patch('collections/:id')
+  @ApiOperation({ summary: 'Cập nhật thư mục' })
+  updateCollection(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateCollectionDto,
+  ) {
+    return this.service.updateCollection(userId, id, dto);
+  }
+
+  @Delete('collections/:id')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Xóa thư mục' })
+  deleteCollection(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.service.deleteCollection(userId, id);
+  }
+
+  @Post('collections/:id/words')
+  @ApiOperation({ summary: 'Thêm từ vào thư mục' })
+  addWordToCollection(
+    @CurrentUser('id') userId: string,
+    @Param('id') collectionId: string,
+    @Body() dto: AddWordToCollectionDto,
+  ) {
+    return this.service.addWordToCollection(userId, collectionId, dto.personalWordId);
+  }
+
+  @Delete('collections/:id/words/:wordId')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Xóa từ khỏi thư mục' })
+  removeWordFromCollection(
+    @CurrentUser('id') userId: string,
+    @Param('id') collectionId: string,
+    @Param('wordId') personalWordId: string,
+  ) {
+    return this.service.removeWordFromCollection(userId, collectionId, personalWordId);
+  }
+
+  @Get(':id/collections')
+  @ApiOperation({ summary: 'Lấy danh sách thư mục của một từ' })
+  getWordCollections(
+    @CurrentUser('id') userId: string,
+    @Param('id') personalWordId: string,
+  ) {
+    return this.service.getWordCollections(userId, personalWordId);
   }
 }

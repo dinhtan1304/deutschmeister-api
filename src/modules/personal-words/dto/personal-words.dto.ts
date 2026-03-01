@@ -353,6 +353,11 @@ export class QueryPersonalWordsDto {
   @ApiPropertyOptional({ default: 50 })
   @IsOptional()
   limit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collectionId?: string;
 }
 
 // ============================================

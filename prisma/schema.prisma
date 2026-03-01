@@ -22,6 +22,7 @@ model User {
   grammarProgress GrammarProgress[]
   history         History[]
   personalWords   PersonalWord[]
+  wordCollections WordCollection[]
   progress        Progress[]
   refreshTokens   RefreshToken[]
   settings        Settings?
@@ -248,6 +249,7 @@ model PersonalWord {
   repetitions     Int       @default(0)
   totalReviews    Int       @default(0) @map("total_reviews")
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  collectionWords WordCollectionWord[]
 
   @@unique([userId, word, wordType])
   @@index([userId])
@@ -589,4 +591,34 @@ model FreeSpeakingSession {
   @@index([userId, status])
   @@index([userId, createdAt(sort: Desc)])
   @@map("free_speaking_sessions")
+}
+
+model WordCollection {
+  id          String               @id @default(cuid())
+  userId      String               @map("user_id")
+  name        String
+  color       String               @default("#6366F1")
+  icon        String               @default("📁")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  words       WordCollectionWord[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("word_collections")
+}
+
+model WordCollectionWord {
+  id             String         @id @default(cuid())
+  collectionId   String         @map("collection_id")
+  personalWordId String         @map("personal_word_id")
+  addedAt        DateTime       @default(now()) @map("added_at")
+  collection     WordCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  personalWord   PersonalWord   @relation(fields: [personalWordId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, personalWordId])
+  @@index([collectionId])
+  @@index([personalWordId])
+  @@map("word_collection_words")
 }

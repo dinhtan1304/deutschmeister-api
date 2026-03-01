@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -26,6 +27,7 @@ import {
   IntervalPreviewDto,
 } from './dto/personal-words.dto';
 import { QuickAddWordDto } from './dto/quick-add-word.dto';
+import { CreateCollectionDto, UpdateCollectionDto } from './dto/collection.dto';
 
 @Injectable()
 export class PersonalWordsService {
@@ -84,6 +86,7 @@ export class PersonalWordsService {
       gender,
       category,
       favoritesOnly,
+      collectionId,
       sortBy = 'createdAt',
       sortOrder = 'desc',
       page = 1,
@@ -106,6 +109,7 @@ export class PersonalWordsService {
     if (level) where.level = level;
     if (category) where.category = category;
     if (favoritesOnly) where.isFavorite = true;
+    if (collectionId) where.collectionWords = { some: { collectionId } };
 
     // Gender filter (query JSON field)
     if (gender) {
@@ -844,6 +848,115 @@ async quickAddFromDictionary(userId: string, dto: QuickAddWordDto) {
       notes: 'Thêm từ Dictionary Popup',
     },
   });
+}
+
+// ============================================
+// COLLECTIONS
+// ============================================
+
+async getCollections(userId: string) {
+  const collections = await this.prisma.wordCollection.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+    include: { _count: { select: { words: true } } },
+  });
+  return collections.map(c => ({
+    id: c.id,
+    name: c.name,
+    color: c.color,
+    icon: c.icon,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    wordCount: c._count.words,
+  }));
+}
+
+async createCollection(userId: string, dto: CreateCollectionDto) {
+  try {
+    const collection = await this.prisma.wordCollection.create({
+      data: {
+        userId,
+        name: dto.name.trim(),
+        color: dto.color ?? '#6366F1',
+        icon: dto.icon ?? '📁',
+      },
+      include: { _count: { select: { words: true } } },
+    });
+    return { ...collection, wordCount: collection._count.words };
+  } catch (e: any) {
+    if (e?.code === 'P2002') throw new ConflictException('Tên thư mục đã tồn tại');
+    throw e;
+  }
+}
+
+async updateCollection(userId: string, id: string, dto: UpdateCollectionDto) {
+  const collection = await this.prisma.wordCollection.findFirst({ where: { id, userId } });
+  if (!collection) throw new NotFoundException('Không tìm thấy thư mục');
+  try {
+    const updated = await this.prisma.wordCollection.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name.trim() }),
+        ...(dto.color !== undefined && { color: dto.color }),
+        ...(dto.icon !== undefined && { icon: dto.icon }),
+      },
+      include: { _count: { select: { words: true } } },
+    });
+    return { ...updated, wordCount: updated._count.words };
+  } catch (e: any) {
+    if (e?.code === 'P2002') throw new ConflictException('Tên thư mục đã tồn tại');
+    throw e;
+  }
+}
+
+async deleteCollection(userId: string, id: string) {
+  const collection = await this.prisma.wordCollection.findFirst({ where: { id, userId } });
+  if (!collection) throw new NotFoundException('Không tìm thấy thư mục');
+  await this.prisma.wordCollection.delete({ where: { id } });
+}
+
+async addWordToCollection(userId: string, collectionId: string, personalWordId: string) {
+  const collection = await this.prisma.wordCollection.findFirst({ where: { id: collectionId, userId } });
+  if (!collection) throw new NotFoundException('Không tìm thấy thư mục');
+
+  const word = await this.prisma.personalWord.findFirst({ where: { id: personalWordId, userId } });
+  if (!word) throw new NotFoundException('Không tìm thấy từ');
+
+  try {
+    await this.prisma.wordCollectionWord.create({
+      data: { collectionId, personalWordId },
+    });
+  } catch (e: any) {
+    if (e?.code === 'P2002') throw new ConflictException('Từ đã có trong thư mục này');
+    throw e;
+  }
+  return this.getCollections(userId).then(cols => cols.find(c => c.id === collectionId));
+}
+
+async removeWordFromCollection(userId: string, collectionId: string, personalWordId: string) {
+  const collection = await this.prisma.wordCollection.findFirst({ where: { id: collectionId, userId } });
+  if (!collection) throw new NotFoundException('Không tìm thấy thư mục');
+
+  const deleted = await this.prisma.wordCollectionWord.deleteMany({
+    where: { collectionId, personalWordId },
+  });
+  if (deleted.count === 0) throw new NotFoundException('Từ không có trong thư mục này');
+}
+
+async getWordCollections(userId: string, personalWordId: string) {
+  const word = await this.prisma.personalWord.findFirst({ where: { id: personalWordId, userId } });
+  if (!word) throw new ForbiddenException();
+
+  const entries = await this.prisma.wordCollectionWord.findMany({
+    where: { personalWordId },
+    include: { collection: true },
+  });
+  return entries.map(e => ({
+    id: e.collection.id,
+    name: e.collection.name,
+    color: e.collection.color,
+    icon: e.collection.icon,
+  }));
 }
 
 
