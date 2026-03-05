@@ -40,8 +40,54 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('This account uses social login. Please sign in with Google or Facebook.');
+    }
+
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
+
+    return this.generateTokens(user.id, user.email, user.role);
+  }
+
+  async findOrCreateOAuthUser(
+    provider: string,
+    providerUid: string,
+    email: string,
+    name: string,
+    avatar?: string,
+  ) {
+    // 1. Check existing OAuth link
+    const existing = await this.prisma.oAuthAccount.findUnique({
+      where: { provider_providerUid: { provider, providerUid } },
+      include: { user: true },
+    });
+
+    if (existing) {
+      return this.generateTokens(existing.user.id, existing.user.email, existing.user.role);
+    }
+
+    // 2. Check existing user by email (link accounts)
+    let user = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!user) {
+      // 3. Create new user (no password)
+      user = await this.prisma.user.create({
+        data: {
+          email: email.toLowerCase(),
+          name,
+          avatar,
+          settings: { create: {} },
+        },
+      });
+    }
+
+    // 4. Create OAuth link
+    await this.prisma.oAuthAccount.create({
+      data: { provider, providerUid, userId: user.id },
+    });
 
     return this.generateTokens(user.id, user.email, user.role);
   }
