@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -27,6 +28,7 @@ import { ExamSpeakingModule } from './modules/exam-speaking/exam-speaking.module
 import { FreeSpeakingModule } from './modules/free-speaking/free-speaking.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 
 @Module({
   imports: [
@@ -62,13 +64,14 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     FreeSpeakingModule,
     AdminModule,
     SubscriptionsModule,
+    FeedbackModule,
   ],
   controllers: [AppController],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     // ThrottlerGuard runs after JwtAuthGuard so the userId is available for
     // per-user tracking. Endpoints without @Throttle() use the 'default' limit.
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: CustomThrottlerGuard },
   ],
 })
 export class AppModule {}

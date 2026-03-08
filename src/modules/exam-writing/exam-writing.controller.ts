@@ -6,6 +6,8 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PremiumGuard } from '../../common/guards/premium.guard';
+import { PracticeQuotaGuard } from '../../common/guards/practice-quota.guard';
+import { Feature } from '../../common/decorators/feature.decorator';
 import { ExamWritingService } from './exam-writing.service';
 import { CreateExamWritingDto } from './dto/create-exam-writing.dto';
 import { SubmitExamWritingDto } from './dto/submit-exam-writing.dto';
@@ -19,14 +21,17 @@ import { QueryExamWritingDto } from './dto/query-exam-writing.dto';
 export class ExamWritingController {
   constructor(private readonly service: ExamWritingService) {}
 
-  // POST /exam-writing/generate
-  @Throttle({ default: { limit: 15, ttl: 60000 } })
+  // POST /exam-writing/generate — heavy AI call
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
+  @Feature('examWriting')
+  @UseGuards(PracticeQuotaGuard)
   @Post('generate')
   generate(@Req() req: any, @Body() dto: CreateExamWritingDto) {
     return this.service.generateSession(req.user.id, dto);
   }
 
-  // PATCH /exam-writing/:id/draft
+  // PATCH /exam-writing/:id/draft — autosave, no AI
   @Patch(':id/draft')
   @HttpCode(200)
   saveDraft(
@@ -37,8 +42,9 @@ export class ExamWritingController {
     return this.service.saveDraft(req.user.id, id, body.userTexts);
   }
 
-  // POST /exam-writing/:id/submit
-  @Throttle({ default: { limit: 15, ttl: 60000 } })
+  // POST /exam-writing/:id/submit — calls Gemini for grading
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
   @Post(':id/submit')
   @HttpCode(200)
   submit(

@@ -13,6 +13,9 @@ export class PremiumGuard implements CanActivate {
       throw new ForbiddenException('Cần đăng nhập');
     }
 
+    // BETA: all features unlocked for testing — set BETA_OPEN=false to enforce again
+    if (process.env.BETA_OPEN === 'true') return true;
+
     const sub = await this.prisma.userSubscription.findUnique({
       where: { userId: user.id },
     });

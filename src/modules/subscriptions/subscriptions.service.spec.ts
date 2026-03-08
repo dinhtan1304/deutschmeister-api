@@ -26,7 +26,7 @@ describe('SubscriptionsService', () => {
 
   beforeEach(() => {
     prisma = makePrisma();
-    service = new SubscriptionsService(prisma as any);
+    service = new SubscriptionsService(prisma as any, { get: jest.fn((key: string, def: string) => def ?? '') } as any);
   });
 
   // ─── confirmPayment ───────────────────────────────────────────────────────

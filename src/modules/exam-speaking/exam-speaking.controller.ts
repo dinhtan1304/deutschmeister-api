@@ -3,6 +3,8 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PremiumGuard } from '../../common/guards/premium.guard';
+import { PracticeQuotaGuard } from '../../common/guards/practice-quota.guard';
+import { Feature } from '../../common/decorators/feature.decorator';
 import { ExamSpeakingService } from './exam-speaking.service';
 import { CreateExamSpeakingDto } from './dto/create-exam-speaking.dto';
 import { SubmitExamSpeakingDto } from './dto/submit-exam-speaking.dto';
@@ -16,13 +18,19 @@ import { QueryExamSpeakingDto } from './dto/query-exam-speaking.dto';
 export class ExamSpeakingController {
   constructor(private readonly service: ExamSpeakingService) {}
 
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  // Heavy AI call — generate exam content
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
+  @Feature('examSpeaking')
+  @UseGuards(PracticeQuotaGuard)
   @Post('generate')
   generate(@Req() req: any, @Body() dto: CreateExamSpeakingDto) {
     return this.service.generateSession(req.user.id, dto);
   }
 
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  // Calls Gemini for speech grading
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
   @Post(':id/submit')
   @HttpCode(200)
   submit(@Req() req: any, @Param('id') id: string, @Body() dto: SubmitExamSpeakingDto) {

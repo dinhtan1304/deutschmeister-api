@@ -3,9 +3,10 @@ import { ExamSpeakingController } from './exam-speaking.controller';
 import { ExamSpeakingService } from './exam-speaking.service';
 import { GeminiService } from '../writing/gemini.service';
 import { PremiumGuard } from '../../common/guards/premium.guard';
+import { PracticeQuotaGuard } from '../../common/guards/practice-quota.guard';
 
 @Module({
   controllers: [ExamSpeakingController],
-  providers: [ExamSpeakingService, GeminiService, PremiumGuard],
+  providers: [ExamSpeakingService, GeminiService, PremiumGuard, PracticeQuotaGuard],
 })
 export class ExamSpeakingModule {}

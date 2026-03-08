@@ -8,13 +8,14 @@ import {
   Res,
   Req,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto, RefreshTokenDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, RefreshTokenDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -39,17 +40,31 @@ export class AuthController {
   @Public()
   @Post('register')
   @ApiOperation({ summary: 'Register new user' })
-  async register(@Body() dto: RegisterDto, @Res() res: Response) {
-    const result = await this.authService.register(dto);
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
+  }
 
-    // Set refresh token as httpOnly cookie
-    res.cookie(REFRESH_TOKEN_COOKIE, result.refreshToken, COOKIE_OPTIONS);
+  @Public()
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify email with token' })
+  async verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token);
+  }
 
-    // Return only accessToken and user (no refreshToken in body)
-    return res.json({
-      accessToken: result.accessToken,
-      user: result.user,
-    });
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send password reset email' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password with token' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @Public()

@@ -6,6 +6,8 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PremiumGuard } from '../../common/guards/premium.guard';
+import { PracticeQuotaGuard } from '../../common/guards/practice-quota.guard';
+import { Feature } from '../../common/decorators/feature.decorator';
 import { ExamReadingService } from './exam-reading.service';
 import { CreateExamReadingDto } from './dto/create-exam-reading.dto';
 import { SubmitExamReadingDto } from './dto/submit-exam-reading.dto';
@@ -19,14 +21,17 @@ import { QueryExamReadingDto } from './dto/query-exam-reading.dto';
 export class ExamReadingController {
   constructor(private readonly service: ExamReadingService) {}
 
-  // POST /exam-reading/generate — heavy AI call, throttle 5/min
-  @Throttle({ default: { limit: 15, ttl: 60000 } })
+  // POST /exam-reading/generate — heavy AI call
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
+  @Feature('examReading')
+  @UseGuards(PracticeQuotaGuard)
   @Post('generate')
   generate(@Req() req: any, @Body() dto: CreateExamReadingDto) {
     return this.service.generateSession(req.user.id, dto);
   }
 
-  // POST /exam-reading/:id/submit
+  // POST /exam-reading/:id/submit — local grading, no AI
   @Post(':id/submit')
   @HttpCode(200)
   submit(

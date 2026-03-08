@@ -5,6 +5,7 @@ import { RequestUpgradeDto, AdminGrantDto, AdminConfirmPaymentDto } from './dto'
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Subscriptions')
 @Controller('subscriptions')
@@ -13,6 +14,7 @@ export class SubscriptionsController {
 
   // ─── Public ─────────────────────────────────────────────────────────────────
 
+  @Public()
   @Get('plans')
   @ApiOperation({ summary: 'Get available plans' })
   getPlans() {

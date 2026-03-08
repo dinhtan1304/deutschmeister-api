@@ -36,19 +36,23 @@ async function bootstrap() {
     }),
   );
 
-  const config = new DocumentBuilder()
-    .setTitle('DeutschMeister API')
-    .setDescription('API for German article learning application')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('DeutschMeister API')
+      .setDescription('API for German article learning application')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`🚀 Server running on http://localhost:${port}`);
-  console.log(`📚 API docs on http://localhost:${port}/docs`);
+  console.log(`Server running on http://localhost:${port}`);
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`API docs on http://localhost:${port}/docs`);
+  }
 }
 bootstrap();

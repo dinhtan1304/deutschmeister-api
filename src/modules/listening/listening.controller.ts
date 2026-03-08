@@ -16,7 +16,8 @@ import { SubmitListeningDto } from './dto/submit-listening.dto';
 export class ListeningController {
   constructor(private readonly service: ListeningService) {}
 
-  @Throttle({ default: { limit: 15, ttl: 60000 } })
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
   @Post('generate')
   @Feature('listening')
   @UseGuards(PracticeQuotaGuard)
@@ -24,7 +25,7 @@ export class ListeningController {
     return this.service.generateSession(req.user.id, dto);
   }
 
-  @Throttle({ default: { limit: 15, ttl: 60000 } })
+  // Local grading — no AI call, no throttle needed
   @Post(':id/submit')
   @HttpCode(200)
   submit(@Req() req: any, @Param('id') id: string, @Body() dto: SubmitListeningDto) {

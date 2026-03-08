@@ -1,9 +1,17 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { PrismaService } from '../../database/prisma.service';
-import { RegisterDto, LoginDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class AuthService {
@@ -11,6 +19,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    private emailService: EmailService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -20,16 +29,46 @@ export class AuthService {
     if (exists) throw new ConflictException('Email already registered');
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
+    const verifyToken = crypto.randomBytes(32).toString('hex');
+    const verifyExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+
     const user = await this.prisma.user.create({
       data: {
         email: dto.email.toLowerCase(),
         passwordHash,
         name: dto.name,
+        emailVerifyToken: verifyToken,
+        emailVerifyExpiry: verifyExpiry,
         settings: { create: {} },
       },
     });
 
-    return this.generateTokens(user.id, user.email, user.role);
+    await this.emailService.sendVerificationEmail(user.email, user.name ?? '', verifyToken);
+
+    return { message: 'Đăng ký thành công! Vui lòng kiểm tra email để xác nhận tài khoản.' };
+  }
+
+  async verifyEmail(token: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { emailVerifyToken: token },
+    });
+
+    if (!user) throw new BadRequestException('Token xác nhận không hợp lệ');
+    if (user.emailVerified) throw new BadRequestException('Email đã được xác nhận trước đó');
+    if (!user.emailVerifyExpiry || user.emailVerifyExpiry < new Date()) {
+      throw new BadRequestException('Token xác nhận đã hết hạn. Vui lòng đăng ký lại.');
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        emailVerified: true,
+        emailVerifyToken: null,
+        emailVerifyExpiry: null,
+      },
+    });
+
+    return { message: 'Email đã được xác nhận thành công! Bạn có thể đăng nhập ngay.' };
   }
 
   async login(dto: LoginDto) {
@@ -47,7 +86,58 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
 
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('EMAIL_NOT_VERIFIED');
+    }
+
     return this.generateTokens(user.id, user.email, user.role);
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+
+    // Always return same message to prevent email enumeration
+    if (!user || !user.passwordHash) {
+      return { message: 'Nếu email tồn tại, chúng tôi đã gửi link đặt lại mật khẩu.' };
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1h
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordResetToken: resetToken, passwordResetExpiry: resetExpiry },
+    });
+
+    await this.emailService.sendPasswordResetEmail(user.email, user.name ?? '', resetToken);
+
+    return { message: 'Nếu email tồn tại, chúng tôi đã gửi link đặt lại mật khẩu.' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const user = await this.prisma.user.findFirst({
+      where: { passwordResetToken: dto.token },
+    });
+
+    if (!user) throw new BadRequestException('Token không hợp lệ hoặc đã được sử dụng');
+    if (!user.passwordResetExpiry || user.passwordResetExpiry < new Date()) {
+      throw new BadRequestException('Token đã hết hạn. Vui lòng yêu cầu lại.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+      },
+    });
+
+    return { message: 'Mật khẩu đã được đặt lại thành công! Vui lòng đăng nhập.' };
   }
 
   async findOrCreateOAuthUser(
@@ -73,12 +163,13 @@ export class AuthService {
     });
 
     if (!user) {
-      // 3. Create new user (no password)
+      // 3. Create new user (OAuth users are auto-verified)
       user = await this.prisma.user.create({
         data: {
           email: email.toLowerCase(),
           name,
           avatar,
+          emailVerified: true,
           settings: { create: {} },
         },
       });
@@ -154,13 +245,6 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    // All three DB operations are independent — run in parallel instead of
-    // sequentially (previously 3 serial round-trips per login/register).
-    //
-    // deleteMany: prune expired tokens so users who never explicitly logout
-    //   don't accumulate one row per login indefinitely.
-    // create:     persist the new refresh token.
-    // findUnique: fetch the user shape required by the response DTO.
     const [, , user] = await Promise.all([
       this.prisma.refreshToken.deleteMany({
         where: { userId, expiresAt: { lt: new Date() } },

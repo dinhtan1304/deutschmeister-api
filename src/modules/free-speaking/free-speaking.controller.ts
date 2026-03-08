@@ -16,7 +16,8 @@ import { SubmitFreeSpeakingDto } from './dto/submit-free-speaking.dto';
 export class FreeSpeakingController {
   constructor(private readonly service: FreeSpeakingService) {}
 
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
   @Post('generate')
   @Feature('freeSpeaking')
   @UseGuards(PracticeQuotaGuard)
@@ -24,7 +25,9 @@ export class FreeSpeakingController {
     return this.service.generateSession(req.user.id, dto);
   }
 
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  // Calls Gemini for speech grading
+  @SkipThrottle({ default: false })
+  @Throttle({ ai: { limit: 10, ttl: 60_000 } })
   @Post(':id/submit')
   @HttpCode(200)
   submit(@Req() req: any, @Param('id') id: string, @Body() dto: SubmitFreeSpeakingDto) {

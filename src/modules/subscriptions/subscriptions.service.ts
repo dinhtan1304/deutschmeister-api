@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { RequestUpgradeDto, AdminGrantDto, AdminConfirmPaymentDto } from './dto';
 
@@ -38,17 +39,23 @@ export const PLANS = {
   },
 } as const;
 
-// Bank transfer info
-export const BANK_INFO = {
-  bankName: 'MB Bank',
-  accountNumber: '1234567890',
-  accountName: 'NGUYEN VAN A',
-  content: (userId: string) => `NANGCAP ${userId.slice(-8).toUpperCase()}`,
-};
+export const TRANSFER_NOTE = (userId: string) => `NANGCAP ${userId.slice(-8).toUpperCase()}`;
 
 @Injectable()
 export class SubscriptionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private config: ConfigService,
+  ) {}
+
+  private getBankInfo(userId: string) {
+    return {
+      bankName: this.config.get<string>('BANK_NAME', 'MB Bank'),
+      accountNumber: this.config.get<string>('BANK_ACCOUNT_NUMBER', ''),
+      accountName: this.config.get<string>('BANK_ACCOUNT_NAME', ''),
+      content: TRANSFER_NOTE(userId),
+    };
+  }
 
   getPlans() {
     return Object.values(PLANS);
@@ -107,15 +114,14 @@ export class SubscriptionsService {
         period: dto.period,
         amount,
         status: 'pending',
-        transferNote: BANK_INFO.content(userId),
+        transferNote: TRANSFER_NOTE(userId),
       },
     });
 
     return {
       payment,
       bankInfo: {
-        ...BANK_INFO,
-        content: BANK_INFO.content(userId),
+        ...this.getBankInfo(userId),
         amount,
       },
     };
