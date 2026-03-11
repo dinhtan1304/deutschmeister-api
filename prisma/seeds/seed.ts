@@ -2,6 +2,7 @@ import { prisma } from './client';
 import { seedPart1 } from './words-part1.seed';
 import { seedPart2 } from './words-part2.seed';
 import { seedPart3 } from './words-part3.seed';
+import { seedPart4 } from './words-part4.seed';
 import { seedGrammarA1 } from './grammar-a1';
 import { seedGrammarA2 } from './grammar-a2';
 
@@ -19,6 +20,7 @@ async function main() {
   await seedPart1();  // A1: 12 topics, ~461 words
   await seedPart2();  // A2+B1: 12 topics, ~341 words
   await seedPart3();  // B2+Professional: 12 topics, ~416 words
+  await seedPart4();  // Goethe-Standard: 5 topics, ~140 words (Kleidung, Tiere, Wochentage, Sport, Haushalt)
 
   // Grammar — A1 clears all grammar data first, then A2 appends
   await seedGrammarA1();
