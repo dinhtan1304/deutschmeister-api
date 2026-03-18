@@ -4,10 +4,14 @@ import { PrismaService } from '../../database/prisma.service';
 import { SearchWordsDto, RandomWordsDto } from './dto/words.dto';
 import { CreateWordDto } from './dto/create-word.dto';
 import { UpdateWordDto } from './dto/update-word.dto';
+import { GeminiService } from '../writing/gemini.service';
 
 @Injectable()
 export class WordsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private gemini: GeminiService,
+  ) {}
 
   async search(dto: SearchWordsDto) {
     const { search, gender, category, level, page = 1, limit = 20 } = dto;
@@ -163,4 +167,10 @@ export class WordsService {
     return { success: true };
   }
 
+  async getWordContext(wordId: string, cefrLevel: string) {
+    const word = await this.prisma.word.findUnique({ where: { id: wordId }, select: { word: true, translationVi: true, translationEn: true } });
+    if (!word) throw new NotFoundException('Word not found');
+    const translation = word.translationVi || word.translationEn;
+    return this.gemini.getWordContext(word.word, translation, cefrLevel || 'A1');
+  }
 }

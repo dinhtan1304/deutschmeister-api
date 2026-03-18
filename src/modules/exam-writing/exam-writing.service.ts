@@ -5,6 +5,9 @@ import { CreateExamWritingDto } from './dto/create-exam-writing.dto';
 import { SubmitExamWritingDto } from './dto/submit-exam-writing.dto';
 import { QueryExamWritingDto } from './dto/query-exam-writing.dto';
 import { ExamWritingTeil, EXAM_WRITING_CONFIG } from '../exam-reading/data/exam-config';
+import { UsersService } from '../users/users.service';
+import { AchievementsService } from '../achievements/achievements.service';
+import { ChallengesService } from '../challenges/challenges.service';
 
 @Injectable()
 export class ExamWritingService {
@@ -13,6 +16,9 @@ export class ExamWritingService {
   constructor(
     private prisma: PrismaService,
     private gemini: GeminiService,
+    private usersService: UsersService,
+    private achievementsService: AchievementsService,
+    private challengesService: ChallengesService,
   ) {}
 
   // ─── Generate ────────────────────────────────────────────────────────────────
@@ -92,7 +98,7 @@ export class ExamWritingService {
         ? (totalWeightedScore / totalMaxPoints) * 100
         : 0;
 
-      return this.prisma.examWritingSession.update({
+      const result = await this.prisma.examWritingSession.update({
         where: { id: sessionId },
         data: {
           grading: gradingMap as any,
@@ -101,6 +107,10 @@ export class ExamWritingService {
           gradedAt: new Date(),
         },
       });
+      this.usersService.addXp(userId, 50, 'exam_complete').catch(() => null);
+      this.achievementsService.checkAndUnlock(userId, 'exam_completed').catch(() => null);
+      this.challengesService.updateProgress(userId, 'exam_complete').catch(() => null);
+      return result;
     } catch (error) {
       this.logger.error(`Grading failed for session ${sessionId}: ${error.message}`);
       await this.prisma.examWritingSession.update({

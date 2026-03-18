@@ -22,6 +22,8 @@ model User {
   createdAt       DateTime          @default(now()) @map("created_at")
   updatedAt       DateTime          @updatedAt @map("updated_at")
   role            String            @default("user")
+  xp              Int               @default(0)
+  level           Int               @default(1)
   favorites       Favorite[]
   gameSessions    GameSession[]
   grammarProgress GrammarProgress[]
@@ -44,6 +46,9 @@ model User {
   subscription        UserSubscription?
   payments            Payment[]
   feedbacks           Feedback[]
+  xpTransactions      XpTransaction[]
+  userAchievements    UserAchievement[]
+  challengeProgress   UserChallengeProgress[]
 
   @@map("users")
 }
@@ -119,10 +124,11 @@ model Settings {
   vibrationEnabled Boolean  @default(true) @map("vibration_enabled")
   dailyGoal        Int      @default(20) @map("daily_goal")
   preferredLevel   String   @default("A1") @map("preferred_level")
-  showVietnamese   Boolean  @default(true) @map("show_vietnamese")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  showVietnamese     Boolean  @default(true) @map("show_vietnamese")
+  showOnLeaderboard  Boolean  @default(true) @map("show_on_leaderboard")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("settings")
 }
@@ -656,4 +662,65 @@ model Feedback {
   @@index([status])
   @@index([createdAt(sort: Desc)])
   @@map("feedbacks")
+}
+
+model XpTransaction {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  amount    Int
+  reason    String   // 'srs_review', 'game_complete', 'exam_complete', 'writing_graded', 'achievement', 'streak_bonus'
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("xp_transactions")
+}
+
+model Achievement {
+  id            String            @id @default(cuid())
+  key           String            @unique
+  name          String
+  nameVi        String            @map("name_vi")
+  description   String
+  descriptionVi String            @map("description_vi")
+  icon          String
+  xpReward      Int               @default(10) @map("xp_reward")
+  category      String            // 'vocabulary', 'streak', 'games', 'exams', 'writing', 'level'
+  createdAt     DateTime          @default(now()) @map("created_at")
+  userAchievements UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  achievementId String      @map("achievement_id")
+  unlockedAt    DateTime    @default(now()) @map("unlocked_at")
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@map("user_achievements")
+}
+
+model UserChallengeProgress {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  weekStart    DateTime  @map("week_start")
+  challengeKey String    @map("challenge_key")
+  title        String
+  titleVi      String    @map("title_vi")
+  target       Int
+  current      Int       @default(0)
+  completed    Boolean   @default(false)
+  xpReward     Int       @default(50) @map("xp_reward")
+  xpRewarded   Boolean   @default(false) @map("xp_rewarded")
+  completedAt  DateTime? @map("completed_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart, challengeKey])
+  @@index([userId, weekStart])
+  @@map("user_challenge_progress")
 }

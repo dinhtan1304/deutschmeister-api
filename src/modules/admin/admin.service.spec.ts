@@ -117,13 +117,21 @@ describe('AdminService', () => {
       );
     });
 
-    it('applies free plan filter using is:null', async () => {
+    it('applies free plan filter using NOT active-premium', async () => {
       await service.getUsers({ plan: 'free' });
 
+      // "Free" = excludes users with an active, non-expired premium subscription
       expect(prisma.user.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            subscription: { is: null },
+            NOT: expect.objectContaining({
+              subscription: expect.objectContaining({
+                is: expect.objectContaining({
+                  plan: 'premium',
+                  status: 'active',
+                }),
+              }),
+            }),
           }),
         }),
       );

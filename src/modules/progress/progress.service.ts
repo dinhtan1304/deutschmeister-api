@@ -2,10 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { ReviewDto } from './dto/progress.dto';
 import { calculateSM2, nextReviewDate, isCorrectRating, SM2Rating } from '../../common/utils/sm2';
+import { UsersService } from '../users/users.service';
+import { AchievementsService } from '../achievements/achievements.service';
+import { ChallengesService } from '../challenges/challenges.service';
 
 @Injectable()
 export class ProgressService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private usersService: UsersService,
+    private achievementsService: AchievementsService,
+    private challengesService: ChallengesService,
+  ) {}
 
   async getDue(userId: string, limit = 20) {
     return this.prisma.progress.findMany({
@@ -45,7 +53,7 @@ export class ProgressService {
       dto.rating as SM2Rating,
     );
 
-    return this.prisma.progress.update({
+    const updated = await this.prisma.progress.update({
       where: { id: progress.id },
       data: {
         easeFactor,
@@ -58,6 +66,13 @@ export class ProgressService {
       },
       include: { word: true },
     });
+
+    const xpAmount = isCorrectRating(dto.rating as SM2Rating) ? 10 : 3;
+    this.usersService.addXp(userId, xpAmount, 'srs_review').catch(() => null);
+    this.achievementsService.checkAndUnlock(userId, 'srs_review').catch(() => null);
+    this.challengesService.updateProgress(userId, 'learn_word').catch(() => null);
+
+    return updated;
   }
 
   async getStats(userId: string) {

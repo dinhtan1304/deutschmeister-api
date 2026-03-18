@@ -16,6 +16,7 @@ export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
       callbackURL: config.get<string>('FACEBOOK_CALLBACK_URL'),
       profileFields: ['id', 'emails', 'name', 'photos'],
       scope: ['email'],
+      enableProof: true,
     });
   }
 

@@ -5,12 +5,18 @@ import { CreateExamReadingDto } from './dto/create-exam-reading.dto';
 import { SubmitExamReadingDto } from './dto/submit-exam-reading.dto';
 import { QueryExamReadingDto } from './dto/query-exam-reading.dto';
 import { ExamReadingTeil, ExamTeilQuestion, EXAM_READING_CONFIG } from './data/exam-config';
+import { UsersService } from '../users/users.service';
+import { AchievementsService } from '../achievements/achievements.service';
+import { ChallengesService } from '../challenges/challenges.service';
 
 @Injectable()
 export class ExamReadingService {
   constructor(
     private prisma: PrismaService,
     private gemini: GeminiService,
+    private usersService: UsersService,
+    private achievementsService: AchievementsService,
+    private challengesService: ChallengesService,
   ) {}
 
   // ─── Generate ────────────────────────────────────────────────────────────────
@@ -81,7 +87,7 @@ export class ExamReadingService {
     const totalQ = teile.reduce((s, t) => s + t.questions.length, 0);
     const score = totalQ > 0 ? (totalCorrect / totalQ) * 100 : 0;
 
-    return this.prisma.examReadingSession.update({
+    const result = await this.prisma.examReadingSession.update({
       where: { id: sessionId },
       data: {
         userAnswers: userAnswers as any,
@@ -93,6 +99,11 @@ export class ExamReadingService {
         submittedAt: new Date(),
       },
     });
+
+    this.usersService.addXp(userId, 50, 'exam_complete').catch(() => null);
+    this.achievementsService.checkAndUnlock(userId, 'exam_completed').catch(() => null);
+    this.challengesService.updateProgress(userId, 'exam_complete').catch(() => null);
+    return result;
   }
 
   // ─── Get Session ──────────────────────────────────────────────────────────────

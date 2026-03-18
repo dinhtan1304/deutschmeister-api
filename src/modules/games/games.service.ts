@@ -1,10 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { StartGameDto, SubmitAnswerDto, EndGameDto } from './dto/games.dto';
+import { UsersService } from '../users/users.service';
+import { AchievementsService } from '../achievements/achievements.service';
+import { ChallengesService } from '../challenges/challenges.service';
+import { GeminiService } from '../writing/gemini.service';
 
 @Injectable()
 export class GamesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private usersService: UsersService,
+    private achievementsService: AchievementsService,
+    private challengesService: ChallengesService,
+  ) {}
 
   async startGame(userId: string, dto: StartGameDto) {
     return this.prisma.gameSession.create({
@@ -56,7 +65,7 @@ export class GamesService {
     });
     if (!session) throw new NotFoundException('Session not found');
 
-    return this.prisma.gameSession.update({
+    const result = await this.prisma.gameSession.update({
       where: { id: dto.sessionId },
       data: {
         score: dto.score,
@@ -67,6 +76,12 @@ export class GamesService {
         duration: Math.floor((Date.now() - session.startedAt.getTime()) / 1000),
       },
     });
+
+    this.usersService.addXp(userId, 15, 'game_complete').catch(() => null);
+    this.achievementsService.checkAndUnlock(userId, 'game_ended').catch(() => null);
+    this.challengesService.updateProgress(userId, 'game_session').catch(() => null);
+
+    return result;
   }
 
   async getHistory(userId: string, limit = 20) {

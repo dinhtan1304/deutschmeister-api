@@ -9,6 +9,9 @@ import { PrismaService } from '../../database/prisma.service';
 import { GeminiService } from './gemini.service';
 import { CreateWritingDto, SubmitWritingDto, QueryWritingHistoryDto } from './dto';
 import { WRITING_TOPICS, WRITING_TYPES, WORD_COUNT_SUGGESTIONS } from './data/writing-topics';
+import { UsersService } from '../users/users.service';
+import { AchievementsService } from '../achievements/achievements.service';
+import { ChallengesService } from '../challenges/challenges.service';
 
 @Injectable()
 export class WritingService {
@@ -17,6 +20,9 @@ export class WritingService {
   constructor(
     private prisma: PrismaService,
     private gemini: GeminiService,
+    private usersService: UsersService,
+    private achievementsService: AchievementsService,
+    private challengesService: ChallengesService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════
@@ -197,6 +203,9 @@ export class WritingService {
         return updated;
       });
 
+      this.usersService.addXp(userId, 25, 'writing_graded').catch(() => null);
+      this.achievementsService.checkAndUnlock(userId, 'writing_graded').catch(() => null);
+      this.challengesService.updateProgress(userId, 'writing_session').catch(() => null);
       return this.formatSessionResponse(result);
     } catch (error) {
       // Nếu chấm bài lỗi → đổi status về ERROR

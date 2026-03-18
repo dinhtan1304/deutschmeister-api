@@ -155,7 +155,7 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Google OAuth callback' })
   googleCallback(@Req() req: Request, @Res() res: Response) {
-    const { accessToken, refreshToken } = req.user as any;
+    const { accessToken, refreshToken } = (req as any).user;
     res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, COOKIE_OPTIONS);
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     res.redirect(`${frontendUrl}/auth/callback?token=${accessToken}`);
@@ -176,7 +176,7 @@ export class AuthController {
   @UseGuards(AuthGuard('facebook'))
   @ApiOperation({ summary: 'Facebook OAuth callback' })
   facebookCallback(@Req() req: Request, @Res() res: Response) {
-    const { accessToken, refreshToken } = req.user as any;
+    const { accessToken, refreshToken } = (req as any).user;
     res.cookie(REFRESH_TOKEN_COOKIE, refreshToken, COOKIE_OPTIONS);
     const frontendUrl = this.configService.get<string>('FRONTEND_URL');
     res.redirect(`${frontendUrl}/auth/callback?token=${accessToken}`);

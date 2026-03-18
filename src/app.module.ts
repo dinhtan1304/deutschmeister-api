@@ -29,6 +29,10 @@ import { FreeSpeakingModule } from './modules/free-speaking/free-speaking.module
 import { AdminModule } from './modules/admin/admin.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
+import { AchievementsModule } from './modules/achievements/achievements.module';
+import { ChallengesModule } from './modules/challenges/challenges.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { SchedulerModule } from './modules/scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -65,6 +69,10 @@ import { FeedbackModule } from './modules/feedback/feedback.module';
     AdminModule,
     SubscriptionsModule,
     FeedbackModule,
+    AchievementsModule,
+    ChallengesModule,
+    ScheduleModule.forRoot(),
+    SchedulerModule,
   ],
   controllers: [AppController],
   providers: [

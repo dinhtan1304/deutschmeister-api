@@ -1733,4 +1733,80 @@ Be realistic but encouraging. For ${cefrLevel} students, adjust expectations acc
       };
     }
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // WORD CONTEXT (on-demand examples & collocations)
+  // ═══════════════════════════════════════════════════════════
+
+  async getWordContext(word: string, translation: string, cefrLevel: string) {
+    const prompt = `Du bist ein Deutschlehrer. Erstelle Lernhilfen für das Wort "${word}" (Vietnamesisch: ${translation}) auf Niveau ${cefrLevel}.
+Antworte NUR auf JSON.`;
+
+    const schema = {
+      type: 'OBJECT' as const,
+      properties: {
+        sentences: {
+          type: 'ARRAY' as const,
+          description: '3 example sentences',
+          items: {
+            type: 'OBJECT' as const,
+            properties: {
+              de: { type: 'STRING' as const },
+              vi: { type: 'STRING' as const },
+            },
+            required: ['de', 'vi'],
+          },
+        },
+        collocations: { type: 'ARRAY' as const, items: { type: 'STRING' as const }, description: '4 common German collocations' },
+        memoryTip: { type: 'STRING' as const, description: 'A short Vietnamese memory tip for this word' },
+      },
+      required: ['sentences', 'collocations', 'memoryTip'],
+    };
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json', responseSchema: schema as any, temperature: 0.7 },
+      });
+      return JSON.parse(response.text ?? '{}');
+    } catch (e) {
+      this.logger.error(`getWordContext: ${e.message}`);
+      return { sentences: [], collocations: [], memoryTip: '' };
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // SENTENCE BUILDER (shuffle sentence words for game)
+  // ═══════════════════════════════════════════════════════════
+
+  async generateSentenceBuilderQuestions(cefrLevel: string, count: number) {
+    const prompt = `Erstelle ${count} deutsche Sätze für Niveau ${cefrLevel} zum Üben der Wortstellung.
+Mische die Wörter jedes Satzes zufällig. Antworte NUR auf JSON.`;
+
+    const schema = {
+      type: 'ARRAY' as const,
+      items: {
+        type: 'OBJECT' as const,
+        properties: {
+          sentence: { type: 'STRING' as const, description: 'The correct German sentence' },
+          sentenceVi: { type: 'STRING' as const, description: 'Vietnamese translation' },
+          words: { type: 'ARRAY' as const, items: { type: 'STRING' as const }, description: 'Words shuffled randomly' },
+        },
+        required: ['sentence', 'sentenceVi', 'words'],
+      },
+    };
+
+    try {
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json', responseSchema: schema as any, temperature: 0.8 },
+      });
+      return JSON.parse(response.text ?? '[]');
+    } catch (e) {
+      this.logger.error(`generateSentenceBuilderQuestions: ${e.message}`);
+      return [];
+    }
+  }
 }

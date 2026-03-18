@@ -10,10 +10,19 @@ function makeContext(user: any): ExecutionContext {
 describe('PremiumGuard', () => {
   let guard: PremiumGuard;
   let prisma: { userSubscription: { findUnique: jest.Mock } };
+  let originalBetaOpen: string | undefined;
 
   beforeEach(() => {
+    // Disable BETA_OPEN so the guard enforces premium checks during tests
+    originalBetaOpen = process.env.BETA_OPEN;
+    process.env.BETA_OPEN = 'false';
+
     prisma = { userSubscription: { findUnique: jest.fn() } };
     guard = new PremiumGuard(prisma as any);
+  });
+
+  afterEach(() => {
+    process.env.BETA_OPEN = originalBetaOpen;
   });
 
   it('throws when no user in request', async () => {

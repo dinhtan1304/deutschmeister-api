@@ -150,4 +150,45 @@ export class EmailService {
       this.logger.error(`Failed to send feedback notification: ${err?.message}`);
     }
   }
+
+  async sendDailyReminderEmail(email: string, name: string, wordsToday: number, goal: number, dueCards: number) {
+    const from = this.config.get('SMTP_FROM') || '"DeutschMeister" <noreply@deutschmeister.app>';
+    const appUrl = this.config.get('FRONTEND_URL') || 'https://deutschmeister.app';
+    const progress = Math.min(Math.round((wordsToday / goal) * 100), 100);
+
+    try {
+      await this.transporter.sendMail({
+        from,
+        to: email,
+        subject: `⏰ Đừng quên học tiếng Đức hôm nay! (${wordsToday}/${goal} từ)`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;background:#0a0f1e;color:#e2e8f0;border-radius:16px;overflow:hidden;">
+            <div style="background:linear-gradient(135deg,#F59E0B,#EF4444);padding:24px 28px;">
+              <h1 style="margin:0;font-size:22px;color:#fff;font-weight:800;">⏰ Nhắc nhở học tập</h1>
+              <p style="margin:8px 0 0;color:rgba(255,255,255,.85);font-size:14px;">Hôm nay bạn chưa đạt mục tiêu!</p>
+            </div>
+            <div style="padding:28px;">
+              <p style="font-size:16px;margin:0 0 20px;">Xin chào <strong>${name ?? 'bạn'}</strong>! 👋</p>
+              <p style="margin:0 0 20px;color:#94a3b8;line-height:1.7;">
+                Hôm nay bạn đã học <strong style="color:#F59E0B;">${wordsToday}/${goal} từ</strong>.
+                Chỉ cần thêm <strong style="color:#fff;">${goal - wordsToday} từ</strong> nữa để đạt mục tiêu!
+              </p>
+              <div style="background:rgba(255,255,255,.06);border-radius:10px;overflow:hidden;margin-bottom:20px;">
+                <div style="background:linear-gradient(90deg,#F59E0B,#EF4444);height:8px;width:${progress}%;transition:width .3s;"></div>
+              </div>
+              ${dueCards > 0 ? `<p style="margin:0 0 20px;color:#94a3b8;">📚 Bạn còn <strong style="color:#F59E0B;">${dueCards} thẻ flashcard</strong> cần ôn tập hôm nay.</p>` : ''}
+              <a href="${appUrl}/review" style="display:inline-block;background:linear-gradient(135deg,#F59E0B,#EF4444);color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px;">
+                Học ngay →
+              </a>
+            </div>
+            <div style="padding:16px 28px;border-top:1px solid rgba(255,255,255,.08);text-align:center;">
+              <p style="margin:0;color:rgba(255,255,255,.3);font-size:12px;">DeutschMeister • Học tiếng Đức mỗi ngày</p>
+            </div>
+          </div>
+        `,
+      });
+    } catch (err) {
+      this.logger.error(`Failed to send daily reminder to ${email}: ${err?.message}`);
+    }
+  }
 }
