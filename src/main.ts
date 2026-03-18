@@ -23,8 +23,20 @@ async function bootstrap() {
   app.use(cookieParser());
 
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
-    credentials: true, // Important: allows cookies to be sent cross-origin
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+      const allowed = (process.env.CORS_ORIGIN || 'http://localhost:3001').split(',');
+      // Allow all localhost/LAN origins in development
+      if (
+        process.env.NODE_ENV !== 'production' ||
+        allowed.some((o) => origin.startsWith(o.trim()))
+      ) {
+        return callback(null, true);
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
   });
 
   app.useGlobalPipes(
@@ -49,7 +61,7 @@ async function bootstrap() {
   }
 
   const port = process.env.PORT || 3000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(`Server running on http://localhost:${port}`);
   if (process.env.NODE_ENV !== 'production') {
     console.log(`API docs on http://localhost:${port}/docs`);
